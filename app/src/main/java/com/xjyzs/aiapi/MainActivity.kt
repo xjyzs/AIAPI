@@ -95,6 +95,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
+import kotlin.collections.iterator
 
 
 data class Message(val role: String, val content: String)
@@ -158,15 +159,6 @@ class ChatViewModel : ViewModel() {
         msgs.clear()
         msgs.addAll(lst)
     }
-    fun cancel(){
-        cancel=true
-    }
-    fun resume(){
-        cancel=false
-    }
-    fun isCancelled(): Boolean{
-        return cancel
-    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -191,7 +183,6 @@ var sessions=mutableListOf<String>()
 fun MainUI(viewModel: ChatViewModel) {
     var showMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val pref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val history=context.getSharedPreferences("history", Context.MODE_PRIVATE)
     val scrollState = rememberScrollState()
     var contentHeight by remember { mutableIntStateOf(0) }
@@ -200,13 +191,25 @@ fun MainUI(viewModel: ChatViewModel) {
     val scope = rememberCoroutineScope()
     val sessionsPref = context.getSharedPreferences("sessions", Context.MODE_PRIVATE)
     var currentSession by remember { mutableStateOf("") }
-    api_url=pref.getString("api_url","")!!
-    api_url = if (api_url.endsWith("/")) {api_url+"chat/completions"} else {"$api_url/chat/completions"}
-    api_key=pref.getString("api_key","")!!
-    model=pref.getString("model","")!!
-    val systemPrompt=pref.getString("system_prompt","")!!
+    val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
+    var currentConfig=currentConfigPref.getString("currentConfig","")
     var containerHeight by remember { mutableIntStateOf(0) }
+    var systemPrompt=""
     LaunchedEffect(Unit) {
+        val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        var configsList = mutableListOf<String>()
+        currentConfig=currentConfigPref.getString("currentConfig","")!!
+        for (i in settingsPref.all) {
+            configsList.add(i.key)
+        }
+        val settings = JsonParser.parseString(
+            settingsPref.getString(
+                currentConfig,
+                "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
+            )
+        ).asJsonObject
+        api_url=settings.get("apiUrl").asString;api_key=settings.get("apiKey").asString;model=settings.get("model").asString;systemPrompt=settings.get("systemPrompt").asString
+        api_url = if (api_url.endsWith("/")) {api_url+"chat/completions"} else {"$api_url/chat/completions"}
         sessions= Gson().fromJson(sessionsPref.getString("sessions","[]")!!,object : TypeToken<MutableList<String>>() {}.type)
         if (sessions.isEmpty()) {
             sessions.add(System.currentTimeMillis().toString())
@@ -278,30 +281,33 @@ fun MainUI(viewModel: ChatViewModel) {
                     itemsIndexed(sessions.reversed()) { _,session ->
                         Button({
                             scope.launch { drawerState.close() }
-                            viewModel.cancel()
-                            currentSession=session
-                            if (history.getString(currentSession,"")!!.isNotEmpty()) {
-                                viewModel.fromList(
-                                    Gson().fromJson(
-                                        history.getString(currentSession, "[]")!!,
-                                        Array<Message>::class.java
-                                    ).toMutableList()
-                                )
-                            }else{
-                                viewModel.msgs.clear()
-                                if(systemPrompt.isNotEmpty()) {
+                            if (viewModel.isLoading) {
+                                Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
+                            } else {
+                                currentSession = session
+                                if (history.getString(currentSession, "")!!.isNotEmpty()) {
+                                    viewModel.fromList(
+                                        Gson().fromJson(
+                                            history.getString(currentSession, "[]")!!,
+                                            Array<Message>::class.java
+                                        ).toMutableList()
+                                    )
+                                } else {
+                                    viewModel.msgs.clear()
+                                    if (systemPrompt.isNotEmpty()) {
+                                        viewModel.addSystemMessage(systemPrompt)
+                                    }
+                                }
+                                if (systemPrompt.isNotEmpty()) {
                                     viewModel.addSystemMessage(systemPrompt)
                                 }
+                                scope.launch {
+                                    scrollState.scrollTo(0)
+                                    delay(100)
+                                    scrollState.animateScrollTo(contentHeight, tween(500))
+                                }
                             }
-                            if(systemPrompt.isNotEmpty()) {
-                                viewModel.addSystemMessage(systemPrompt)
-                            }
-                            scope.launch {
-                                scrollState.scrollTo(0)
-                                delay(100)
-                                scrollState.animateScrollTo(contentHeight, tween(500))
-                            }
-                            },colors = ButtonDefaults.buttonColors(Color.Transparent, LocalContentColor.current), shape = RectangleShape, contentPadding = PaddingValues(0.dp)) {
+                        },colors = ButtonDefaults.buttonColors(Color.Transparent, LocalContentColor.current), shape = RectangleShape, contentPadding = PaddingValues(0.dp)) {
                             if (session==currentSession) {
                                 Text(
                                     session,
@@ -331,7 +337,7 @@ fun MainUI(viewModel: ChatViewModel) {
                         Icon(Icons.Default.ModeComment,"")
                     }
                 },
-                title = { Text(stringResource(R.string.app_name)+"-"+currentSession) },
+                title = { Text(stringResource(R.string.app_name)+"-"+currentConfig) },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) {
                         Icon(
@@ -349,15 +355,17 @@ fun MainUI(viewModel: ChatViewModel) {
                                 showMenu = false
                                 val intent=Intent(context,SettingsActivity::class.java)
                                 context.startActivity(intent)
+                                (context as ComponentActivity).finish()
                             }
                         )
                         DropdownMenuItem(
                             text = { Text("开启新对话") },
                             onClick = {
                                 showMenu = false
-                                viewModel.cancel()
-                                scope.launch {
-                                    delay(100)
+                                if (viewModel.isLoading) {
+                                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT)
+                                        .show()
+                                } else {
                                     viewModel.msgs.clear()
                                     viewModel.addSystemMessage(systemPrompt)
                                     currentSession = System.currentTimeMillis().toString()
@@ -375,11 +383,12 @@ fun MainUI(viewModel: ChatViewModel) {
                 onMsgChange = { viewModel.inputMsg = it },
                 onSend = {
                     if (viewModel.isLoading){
-                        viewModel.cancel()
+                        viewModel.cancel=true
                     }else {
                         viewModel.addUserMessage(it)
                         send(context,viewModel)
                         viewModel.inputMsg = ""
+                        scope.launch { scrollState.animateScrollTo(contentHeight,tween(300)) }
                     }
                 },
                 sendImg = if (sendImg==1){Icons.Default.ArrowUpward}else{ImageVector.vectorResource(R.drawable.ic_rectangle)}
@@ -494,7 +503,7 @@ private fun send(
                                 ?.firstOrNull()
                                 ?.asJsonObject
                                 ?.getAsJsonObject("delta")
-                            if (viewModel.isCancelled())break
+                            if (viewModel.cancel)break
                             if (delta?.get("content")?.isJsonNull == false) {
                                 viewModel.updateAIMessage(delta.get("content")?.asString!!)
                             } else {
@@ -519,7 +528,7 @@ private fun send(
         } finally {
             withContext(Dispatchers.Main) {
                 viewModel.isLoading = false
-                viewModel.resume()
+                viewModel.cancel=false
             }
         }
     }

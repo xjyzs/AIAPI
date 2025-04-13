@@ -1,5 +1,6 @@
 package com.xjyzs.aiapi
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -28,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.xjyzs.aiapi.ui.theme.AIAPITheme
 import kotlinx.coroutines.Dispatchers
@@ -66,40 +69,90 @@ class SettingsActivity : ComponentActivity() {
     }
 }
 
+@SuppressLint("MutableCollectionMutableState", "CommitPrefEdits")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsUI(viewModel: SettingsViewModel){
     val context = LocalContext.current
-    val pref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
     var scrollState= rememberScrollState()
-    var expanded by remember { mutableStateOf(false) }
+    var modelsExpanded by remember { mutableStateOf(false) }
+    var configsExpanded by remember { mutableStateOf(false) }
+    var configsList by remember { mutableStateOf(mutableListOf<String>()) }
+    var apiUrl by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var model by remember { mutableStateOf("") }
+    var systemPrompt by remember { mutableStateOf("") }
+    var currentConfig by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        currentConfig=currentConfigPref.getString("currentConfig","")!!
+        for (i in settingsPref.all) {
+            configsList.add(i.key)
+        }
+        val settings = JsonParser.parseString(
+            settingsPref.getString(
+                currentConfig,
+                "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
+            )
+        ).asJsonObject
+        apiUrl=settings.get("apiUrl").asString;apiKey=settings.get("apiKey").asString;model=settings.get("model").asString;systemPrompt=settings.get("systemPrompt").asString
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("设置") },
                 navigationIcon = {
-                    IconButton(onClick = { (context as ComponentActivity).finish() }) {
+                    IconButton(onClick = {
+                        with(currentConfigPref.edit()) {
+                            putString("currentConfig",currentConfig)
+                            apply()
+                        }
+                        val intent = Intent(context, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK }
+                        context.startActivity(intent)
+                        (context as ComponentActivity).finish()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "")
                     }
                 }
             )
         }) { innerPadding ->
         Column(Modifier.fillMaxSize().wrapContentSize(Alignment.Center).padding(innerPadding).padding(30.dp).verticalScroll(scrollState)) {
-            var apiUrl by remember { mutableStateOf(pref.getString("api_url", "")) }
-            var apiKey by remember { mutableStateOf(pref.getString("api_key", "")) }
-            var model by remember { mutableStateOf(pref.getString("model", "")) }
-            var systemPrompt by remember { mutableStateOf(pref.getString("system_prompt", "")) }
-            TextField(label = { Text("api_url") }, value = apiUrl!!, onValueChange = { apiUrl = it }, modifier = Modifier.fillMaxWidth())
-            TextField(label = { Text("api_key") }, value = apiKey!!, onValueChange = { apiKey = it }, modifier = Modifier.fillMaxWidth())
-            TextField(label = { Text("model") }, value = model!!, onValueChange = { model = it }, modifier = Modifier.fillMaxWidth(),trailingIcon = { IconButton(onClick = {
-                expanded = !expanded
+            TextField(label = { Text("config") }, value = currentConfig, onValueChange = { currentConfig = it }, modifier = Modifier.fillMaxWidth(),trailingIcon = { IconButton(onClick = {
+                configsExpanded = !configsExpanded
+            }) { Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "") } })
+            DropdownMenu(
+                expanded = configsExpanded,
+                onDismissRequest = { configsExpanded = false }
+            ) {
+                for (i in configsList) {
+                    DropdownMenuItem(
+                        text = { Text(i) },
+                        onClick = {
+                            currentConfig=i
+                            configsExpanded = false
+                            val settings = JsonParser.parseString(
+                                settingsPref.getString(
+                                    currentConfig,
+                                    "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
+                                )
+                            ).asJsonObject
+                            apiUrl=settings.get("apiUrl").asString;apiKey=settings.get("apiKey").asString;model=settings.get("model").asString;systemPrompt=settings.get("systemPrompt").asString
+                        }
+                    )
+                }
+            }
+            TextField(label = { Text("api_url") }, value = apiUrl, onValueChange = { apiUrl = it }, modifier = Modifier.fillMaxWidth())
+            TextField(label = { Text("api_key") }, value = apiKey, onValueChange = { apiKey = it }, modifier = Modifier.fillMaxWidth())
+            TextField(label = { Text("model") }, value = model, onValueChange = { model = it }, modifier = Modifier.fillMaxWidth(),trailingIcon = { IconButton(onClick = {
+                modelsExpanded = !modelsExpanded
                 if (viewModel.models.isEmpty()) {
-                    getModels(apiUrl!!, apiKey!!, viewModel,context)
+                    getModels(apiUrl, apiKey, viewModel,context)
                 }
             }) { Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "") } })
             DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
+                expanded = modelsExpanded,
+                onDismissRequest = { modelsExpanded = false }
             ) {
                 for (i in viewModel.models) {
                     if (model.toString().lowercase() in i.lowercase()) {
@@ -107,23 +160,24 @@ fun SettingsUI(viewModel: SettingsViewModel){
                             text = { Text(i) },
                             onClick = {
                                 model = i
-                                expanded = false
+                                modelsExpanded = false
                             }
                         )
                     }
                 }
             }
-            TextField(label = { Text("system_prompt") }, value = systemPrompt!!, onValueChange = { systemPrompt = it }, modifier = Modifier.fillMaxWidth())
+            TextField(label = { Text("system_prompt") }, value = systemPrompt, onValueChange = { systemPrompt = it }, modifier = Modifier.fillMaxWidth())
             Button({
-                with(pref.edit()) {
-                    putString("api_url", apiUrl)
-                    putString("api_key",apiKey)
-                    putString("model",model)
-                    putString("system_prompt",systemPrompt)
+                with(settingsPref.edit()) {
+                    putString(currentConfig,Gson().toJson(mapOf("apiUrl" to apiUrl,"apiKey" to apiKey,"model" to model,"systemPrompt" to systemPrompt)))
                     apply()
-                    val intent = Intent(context, MainActivity::class.java)
-                    context.startActivity(intent)
                 }
+                with(currentConfigPref.edit()) {
+                    putString("currentConfig",currentConfig)
+                    apply()
+                }
+                val intent = Intent(context, MainActivity::class.java)
+                context.startActivity(intent)
             }, modifier = Modifier.fillMaxWidth()) {
                 Text("确认")
             }
