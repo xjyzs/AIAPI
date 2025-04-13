@@ -37,11 +37,11 @@ jobs:
           path: app/release/app-release.apk
           retention-days: 90
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
-
-      - name: Upload Debug APK to Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: debug-apk
-          path: app/release/app-debug.apk
+          tag_name: publish
+          files: |
+            app/release/app-release.apk
