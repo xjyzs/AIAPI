@@ -24,14 +24,6 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
 
-      - name: Configure signing
-        uses: r0adkll/sign-android-release@v1
-        with:
-          signingKeyBase64: ${{ secrets.RELEASE_SIGNING_KEY }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
