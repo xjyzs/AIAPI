@@ -67,6 +67,12 @@ class SettingsActivity : ComponentActivity() {
             }
         }
     }
+    override fun onBackPressed() {
+        super.onBackPressed()
+        val intent = Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK }
+        startActivity(intent)
+        finish()
+    }
 }
 
 @SuppressLint("MutableCollectionMutableState", "CommitPrefEdits")

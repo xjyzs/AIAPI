@@ -334,7 +334,7 @@ fun MainUI(viewModel: ChatViewModel) {
             TopAppBar(
                 navigationIcon = {
                     IconButton({scope.launch { drawerState.open() }}) {
-                        Icon(Icons.Default.ModeComment,"")
+                        Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list),"")
                     }
                 },
                 title = { Text(stringResource(R.string.app_name)+"-"+currentConfig) },
