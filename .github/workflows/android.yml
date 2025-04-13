@@ -30,7 +30,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --info | grep "APK generated at"
         
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
