@@ -22,6 +22,7 @@ android {
     }
     signingConfigs {
         create("release") {
+            println(System.getenv("secrets.KEY_ALIAS") ?: "")
             storeFile = file("${project.rootDir}/keystore.jks")
             storePassword = System.getenv("secrets.KEY_STORE_PASSWORD") ?: ""
             keyAlias = System.getenv("secrets.KEY_ALIAS") ?: ""
@@ -63,8 +64,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources=true
+            isMinifyEnabled = false
+            isShrinkResources=false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
