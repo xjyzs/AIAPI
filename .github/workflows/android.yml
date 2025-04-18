@@ -30,7 +30,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
           
       - name: Test
-        run: $ANDROID_HOME/build-tools/34.0.0/apksigner sign
+        run: $ANDROID_HOME/build-tools/35.0.0/apksigner sign
 
       - name: Build Release APK
         run: ./gradlew assembleRelease
