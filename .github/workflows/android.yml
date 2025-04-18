@@ -34,9 +34,6 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          build-tools-version: "35.0.0"
-          cmdline-tools: "latest"
 
       - name: Sign APK with jarsigner
         run: |
@@ -54,6 +51,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: publish
+          tag_name: v1.0
           files: |
             app/build/outputs/apk/release/app-release.apk
