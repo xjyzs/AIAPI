@@ -28,22 +28,19 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          
+      - name: Test
+        run: $ANDROID_HOME/build-tools/34.0.0/apksigner sign
 
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
 
-      - name: Sign APK with jarsigner
+
+      - name: Sign APK with apksigner
         run: |
           echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
-                    -keystore keystore.jks \
-                    -storepass "${{ secrets.KEY_STORE_PASSWORD }}" \
-                    -keypass "${{ secrets.KEY_PASSWORD }}" \
-                    app/build/outputs/apk/release/app-release-unsigned.apk \
-                    "${{ secrets.KEY_ALIAS }}"
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --v1-signing-enabled false --v3-signing-enabled false --ks keystore.jks --ks-key-alias ${{ secrets.KEY_ALIAS }} --ks-pass pass:${{ secrets.KEY_STORE_PASSWORD }} --out app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/app-release-unsigned.apk
           $ANDROID_HOME/build-tools/34.0.0/zipalign -v 4 app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/app-release.apk
 
       - name: Create GitHub Release
