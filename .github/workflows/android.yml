@@ -32,6 +32,16 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
+      - name: Sign APK with jarsigner
+        run: |
+          echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+                    -keystore keystore.jks \
+                    -storepass "${{ secrets.KEY_STORE_PASSWORD }}" \
+                    -keypass "${{ secrets.KEY_PASSWORD }}" \
+                    app/build/outputs/apk/release/app-release-unsigned.apk \
+                    "${{ secrets.KEY_ALIAS }}"
+          zipalign -v 4 app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/app-release.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -40,4 +50,4 @@ jobs:
         with:
           tag_name: publish
           files: |
-            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/app-release.apk
