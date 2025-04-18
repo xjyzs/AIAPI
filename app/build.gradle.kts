@@ -4,7 +4,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    println(System.getenv("secrets.KEY_ALIAS") ?: "没有")
 }
 
 android {
@@ -24,9 +23,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("${project.rootDir}/keystore.jks")
-            storePassword = System.getenv("secrets.KEY_STORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("secrets.KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("secrets.KEY_PASSWORD") ?: ""
+            storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
