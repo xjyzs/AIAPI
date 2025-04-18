@@ -20,3 +20,7 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 -keep class com.xjyzs.aiapi.** { *; }
+# 移除调试信息
+-renamesourcefileattribute SourceFile
+-keepattributes SourceFile,LineNumberTable
+-dontpreverify
