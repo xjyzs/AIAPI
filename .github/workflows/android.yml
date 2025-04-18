@@ -32,6 +32,8 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
       - name: Sign APK with jarsigner
         run: |
           echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
