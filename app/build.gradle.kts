@@ -38,21 +38,26 @@ android {
         create("x86") {
             dimension = "abi"
             ndk { abiFilters.add("x86") }
+            signingConfig = signingConfigs.getByName("release")
         }
         create("x86_64") {
             dimension = "abi"
             ndk { abiFilters.add("x86_64") }
+            signingConfig = signingConfigs.getByName("release")
         }
         create("arm") {
             dimension = "abi"
             ndk { abiFilters.add("armeabi-v7a") }
+            signingConfig = signingConfigs.getByName("release")
         }
         create("arm64") {
             dimension = "abi"
             ndk { abiFilters.add("arm64-v8a") }
+            signingConfig = signingConfigs.getByName("release")
         }
         create("universal") {
             dimension = "abi"
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
