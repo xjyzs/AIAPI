@@ -9,11 +9,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,24 +35,23 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.ModeComment
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
@@ -68,7 +68,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -95,7 +94,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
-import kotlin.collections.iterator
 
 
 data class Message(val role: String, val content: String)
@@ -178,10 +176,15 @@ var api_key = ""
 var model=""
 var sessions=mutableListOf<String>()
 @SuppressLint("CommitPrefEdits")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainUI(viewModel: ChatViewModel) {
     var showMenu by remember { mutableStateOf(false) }
+    var showHistoryMenu by remember { mutableStateOf(false) }
+    var openRenameDialog by remember { mutableStateOf(false) }
+    var openDelDialog by remember { mutableStateOf(false) }
+    var editingSession by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
     val context = LocalContext.current
     val history=context.getSharedPreferences("history", Context.MODE_PRIVATE)
     val scrollState = rememberScrollState()
@@ -194,7 +197,7 @@ fun MainUI(viewModel: ChatViewModel) {
     val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
     var currentConfig=currentConfigPref.getString("currentConfig","")
     var containerHeight by remember { mutableIntStateOf(0) }
-    var systemPrompt=""
+    var systemPrompt by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         var configsList = mutableListOf<String>()
@@ -253,6 +256,101 @@ fun MainUI(viewModel: ChatViewModel) {
             ModalDrawerSheet(
                 modifier = Modifier.width(250.dp)
             ) {
+                DropdownMenu(showHistoryMenu, onDismissRequest = {showHistoryMenu=false}) {
+                    DropdownMenuItem({ Text("重命名") },onClick = {
+                        showHistoryMenu=false
+                        openRenameDialog=true
+                    })
+                    DropdownMenuItem({ Text("删除") }, onClick = {
+                        showHistoryMenu=false
+                        openDelDialog=true
+                    })
+                }
+                if (openRenameDialog) {
+                    AlertDialog(
+                        onDismissRequest = { openRenameDialog = false },
+                        title = { Text("重命名") },
+                        text = { OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it }
+                        )},
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    openRenameDialog = false
+                                    sessions.remove(currentSession)
+                                    sessions.add(newName)
+                                    with (sessionsPref.edit()){
+                                        putString("sessions",Gson().toJson(sessions))
+                                        apply()
+                                    }
+                                    with(history.edit()) {
+                                        remove(currentSession)
+                                        currentSession=newName
+                                        putString(currentSession, Gson().toJson(viewModel.toList()).toString())
+                                        apply()
+                                    }
+                                }
+                            ) { Text("完成") }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { openRenameDialog = false }
+                            ) { Text("取消") }
+                        }
+                    )
+                }
+                if (openDelDialog){
+                    AlertDialog(
+                        onDismissRequest = { openDelDialog = false },
+                        title = { Text("永久删除对话") },
+                        text = { Text("删除后，该对话将不可恢复。确认删除吗？") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    openDelDialog = false
+                                    sessions.remove(currentSession)
+                                    with (sessionsPref.edit()){
+                                        putString("sessions",Gson().toJson(sessions))
+                                        apply()
+                                    }
+                                    if (sessions.isEmpty()) {
+                                        sessions.add(System.currentTimeMillis().toString())
+                                    }
+                                    currentSession=sessions.last()
+                                    if (history.getString(currentSession, "")!!.isNotEmpty()) {
+                                        viewModel.fromList(
+                                            Gson().fromJson(
+                                                history.getString(currentSession, "[]")!!,
+                                                Array<Message>::class.java
+                                            ).toMutableList()
+                                        )
+                                    } else {
+                                        viewModel.msgs.clear()
+                                        if (systemPrompt.isNotEmpty()) {
+                                            viewModel.addSystemMessage(systemPrompt)
+                                        }
+                                    }
+                                    if (systemPrompt.isNotEmpty()) {
+                                        viewModel.addSystemMessage(systemPrompt)
+                                    }
+                                    scope.launch {
+                                        scrollState.scrollTo(0)
+                                        delay(100)
+                                        scrollState.animateScrollTo(contentHeight, tween(500))
+                                    }
+                                }
+                            ) { Text("删除") }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    openDelDialog = false
+                                }
+                            ) { Text("取消") }
+                        }
+                    )
+                }
                 Row(Modifier.padding(16.dp)) {
                     Text("对话记录", fontSize = 24.sp)
                     Spacer(Modifier.weight(1f))
@@ -265,9 +363,9 @@ fun MainUI(viewModel: ChatViewModel) {
                                 scope.launch { drawerState.close() }
                                 viewModel.msgs.clear()
                                 viewModel.addSystemMessage(systemPrompt)
-                                currentSession=System.currentTimeMillis().toString()
+                                currentSession = System.currentTimeMillis().toString()
                                 sessions.add(currentSession)
-                                       },
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -279,39 +377,48 @@ fun MainUI(viewModel: ChatViewModel) {
                 }
                 LazyColumn {
                     itemsIndexed(sessions.reversed()) { _,session ->
-                        Button({
-                            scope.launch { drawerState.close() }
-                            if (viewModel.isLoading) {
-                                Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
-                            } else {
-                                currentSession = session
-                                if (history.getString(currentSession, "")!!.isNotEmpty()) {
-                                    viewModel.fromList(
-                                        Gson().fromJson(
-                                            history.getString(currentSession, "[]")!!,
-                                            Array<Message>::class.java
-                                        ).toMutableList()
-                                    )
+                        Box(modifier = Modifier.combinedClickable(
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                if (viewModel.isLoading) {
+                                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    viewModel.msgs.clear()
+                                    currentSession = session
+                                    if (history.getString(currentSession, "")!!.isNotEmpty()) {
+                                        viewModel.fromList(
+                                            Gson().fromJson(
+                                                history.getString(currentSession, "[]")!!,
+                                                Array<Message>::class.java
+                                            ).toMutableList()
+                                        )
+                                    } else {
+                                        viewModel.msgs.clear()
+                                        if (systemPrompt.isNotEmpty()) {
+                                            viewModel.addSystemMessage(systemPrompt)
+                                        }
+                                    }
                                     if (systemPrompt.isNotEmpty()) {
                                         viewModel.addSystemMessage(systemPrompt)
                                     }
+                                    scope.launch {
+                                        scrollState.scrollTo(0)
+                                        delay(100)
+                                        scrollState.animateScrollTo(contentHeight, tween(500))
+                                    }
                                 }
-                                if (systemPrompt.isNotEmpty()) {
-                                    viewModel.addSystemMessage(systemPrompt)
-                                }
-                                scope.launch {
-                                    scrollState.scrollTo(0)
-                                    delay(100)
-                                    scrollState.animateScrollTo(contentHeight, tween(500))
-                                }
+                            },
+                            onLongClick = {
+                                editingSession=session
+                                newName=session
+                                showHistoryMenu=true
                             }
-                        },colors = ButtonDefaults.buttonColors(Color.Transparent, LocalContentColor.current), shape = RectangleShape, contentPadding = PaddingValues(0.dp)) {
+                        )){
                             if (session==currentSession) {
                                 Text(
                                     session,
-                                    Modifier.weight(1f).padding(16.dp),
+                                    Modifier
+                                        .padding(16.dp)
+                                        .fillMaxWidth(),
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.Normal,
                                     color = MaterialTheme.colorScheme.primary
@@ -319,7 +426,9 @@ fun MainUI(viewModel: ChatViewModel) {
                             }else{
                                 Text(
                                     session,
-                                    Modifier.weight(1f).padding(16.dp),
+                                    Modifier
+                                        .padding(16.dp)
+                                        .fillMaxWidth(),
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.Normal
                                 )
@@ -385,10 +494,14 @@ fun MainUI(viewModel: ChatViewModel) {
                     if (viewModel.isLoading){
                         viewModel.cancel=true
                     }else {
-                        viewModel.addUserMessage(it)
-                        send(context,viewModel)
-                        viewModel.inputMsg = ""
-                        scope.launch { scrollState.animateScrollTo(contentHeight,tween(300)) }
+                        try {
+                            viewModel.addUserMessage(it)
+                            send(context, viewModel)
+                            viewModel.inputMsg = ""
+                            scope.launch { scrollState.animateScrollTo(contentHeight, tween(300)) }
+                        }catch (e: Exception){
+                            Toast.makeText(context,e.toString(), Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
                 sendImg = if (sendImg==1){Icons.Default.ArrowUpward}else{ImageVector.vectorResource(R.drawable.ic_rectangle)}
@@ -398,15 +511,21 @@ fun MainUI(viewModel: ChatViewModel) {
         SelectionContainer(Modifier.onSizeChanged{size->
             containerHeight=size.height
         }) {
-            Column(modifier = Modifier.padding(innerPadding).verticalScroll(scrollState).onSizeChanged { size ->
-                contentHeight = size.height
-            }) {
+            Column(modifier = Modifier
+                .padding(innerPadding)
+                .verticalScroll(scrollState)
+                .onSizeChanged { size ->
+                    contentHeight = size.height
+                }) {
                 for (msg in viewModel.msgs){
                     when (msg.role) {
                         "assistant" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n")}
                         "assistant_reasoning" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n", color = Color.Gray)}
-                        "user" -> Row {Text(msg.content+"\n", Modifier.weight(1f).wrapContentWidth(
-                            Alignment.End));Icon(Icons.Default.AccountCircle,"")}
+                        "user" -> Row {Text(msg.content+"\n", Modifier
+                            .weight(1f)
+                            .wrapContentWidth(
+                                Alignment.End
+                            ));Icon(Icons.Default.AccountCircle,"")}
                         else -> Row {Icon(Icons.Default.Settings,"");Text(msg.content+"\n")}
                     }
                 }
@@ -424,7 +543,10 @@ fun MessageInputBar(
     sendImg: ImageVector
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(), shadowElevation = 8.dp
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding(), shadowElevation = 8.dp
     ) {
         Row(
             modifier = Modifier.padding(16.dp),

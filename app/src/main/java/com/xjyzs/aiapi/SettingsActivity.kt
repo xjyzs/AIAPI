@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,11 @@ class SettingsViewModel: ViewModel() {
 }
 
 class SettingsActivity : ComponentActivity() {
+    private val backCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            navigateToMainAndFinish()
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -66,10 +72,12 @@ class SettingsActivity : ComponentActivity() {
                 SettingsUI(viewModel)
             }
         }
+        onBackPressedDispatcher.addCallback(this, backCallback)
     }
-    override fun onBackPressed() {
-        super.onBackPressed()
-        val intent = Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK }
+    private fun navigateToMainAndFinish() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         startActivity(intent)
         finish()
     }
@@ -124,12 +132,13 @@ fun SettingsUI(viewModel: SettingsViewModel){
             )
         }) { innerPadding ->
         Column(Modifier.fillMaxSize().wrapContentSize(Alignment.Center).padding(innerPadding).padding(30.dp).verticalScroll(scrollState)) {
-            TextField(label = { Text("config") }, value = currentConfig, onValueChange = { currentConfig = it }, modifier = Modifier.fillMaxWidth(),trailingIcon = { IconButton(onClick = {
+            TextField(label = { Text("config") }, value = currentConfig, onValueChange = { currentConfig = it }, modifier = Modifier.fillMaxWidth(),trailingIcon = {
+                IconButton(onClick = {
                 configsExpanded = !configsExpanded
             }) { Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "") } })
             DropdownMenu(
                 expanded = configsExpanded,
-                onDismissRequest = { configsExpanded = false }
+                onDismissRequest = { configsExpanded = false },
             ) {
                 for (i in configsList) {
                     DropdownMenuItem(
