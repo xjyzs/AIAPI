@@ -33,6 +33,12 @@ jobs:
         run: |
           echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
           ./gradlew assembleArm64Release
+      
+      - name: Upload All APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-apks
+          path: app/build
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
