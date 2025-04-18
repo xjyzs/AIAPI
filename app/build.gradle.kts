@@ -24,6 +24,25 @@ android {
     fun AndroidResources.() {
         noCompress("so","arsc")
     }
+    flavorDimensions += "abi"
+    productFlavors {
+        create("x86") {
+            dimension = "abi"
+            ndk { abiFilters.add("x86") }
+        }
+        create("x86_64") {
+            dimension = "abi"
+            ndk { abiFilters.add("x86_64") }
+        }
+        create("arm") {
+            dimension = "abi"
+            ndk { abiFilters.add("armeabi-v7a") }
+        }
+        create("arm64") {
+            dimension = "abi"
+            ndk { abiFilters.add("arm64-v8a") }
+        }
+    }
 
     buildTypes {
         release {
@@ -67,7 +86,7 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.gson)
-    implementation ("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation ("androidx.compose.material:material-icons-extended")
-    implementation ("androidx.compose.material:material:1.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material:material:1.7.0")
 }
