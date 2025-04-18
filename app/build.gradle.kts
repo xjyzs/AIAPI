@@ -26,6 +26,7 @@ android {
             storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
             keyAlias = System.getenv("KEY_ALIAS") ?: ""
             keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            enableV1Signing(false)
         }
     }
 
