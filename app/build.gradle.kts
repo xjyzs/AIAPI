@@ -20,10 +20,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("zh")
     }
+    signingConfigs {
+        create("release") {
+            storeFile = file("keystore.jks")
+            storePassword = System.getenv("secrets.KEY_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("secrets.KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("secrets.KEY_PASSWORD") ?: ""
+        }
+    }
 
     fun AndroidResources.() {
         noCompress("so","arsc")
     }
+    
     flavorDimensions += "abi"
     productFlavors {
         create("x86") {
