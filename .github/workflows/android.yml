@@ -30,13 +30,12 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleArm64Release
 
       - name: Sign APK with apksigner
         run: |
           echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
-          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --v1-signing-enabled false --v3-signing-enabled false --ks keystore.jks --ks-key-alias ${{ secrets.KEY_ALIAS }} --ks-pass pass:${{ secrets.KEY_STORE_PASSWORD }} --out app/build/outputs/apk/release/app-release-signed.apk app/build/outputs/apk/release/app-release-unsigned.apk
-          $ANDROID_HOME/build-tools/35.0.0/zipalign -v 4 app/build/outputs/apk/release/app-release-signed.apk app/build/outputs/apk/release/app-release.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --v1-signing-enabled false --v3-signing-enabled false --ks keystore.jks --ks-key-alias ${{ secrets.KEY_ALIAS }} --ks-pass pass:${{ secrets.KEY_STORE_PASSWORD }}  app/build/outputs/apk/release/*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -45,4 +44,4 @@ jobs:
         with:
           tag_name: v1.0
           files: |
-            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/*
