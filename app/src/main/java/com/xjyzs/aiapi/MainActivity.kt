@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.Keep
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -67,13 +68,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -95,7 +101,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
-
+@Keep
 data class Message(val role: String, val content: String)
 @SuppressLint("MutableCollectionMutableState")
 class ChatViewModel : ViewModel() {
@@ -109,10 +115,12 @@ class ChatViewModel : ViewModel() {
     }
 
     fun addSystemMessage(content: String) {
-        if (msgs.isNotEmpty()) {
-            msgs[0] = Message("system", content)
-        }else{
-            msgs.add(Message("system",content))
+        if (content.isNotEmpty()) {
+            if (msgs.isNotEmpty()) {
+                msgs[0] = Message("system", content)
+            } else {
+                msgs.add(Message("system", content))
+            }
         }
     }
 
@@ -184,7 +192,7 @@ fun MainUI(viewModel: ChatViewModel) {
     var openRenameDialog by remember { mutableStateOf(false) }
     var openDelDialog by remember { mutableStateOf(false) }
     var editingSession by remember { mutableStateOf("") }
-    var newName by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf(TextFieldValue("")) }
     val context = LocalContext.current
     val history=context.getSharedPreferences("history", Context.MODE_PRIVATE)
     val scrollState = rememberScrollState()
@@ -198,6 +206,8 @@ fun MainUI(viewModel: ChatViewModel) {
     var currentConfig=currentConfigPref.getString("currentConfig","")
     var containerHeight by remember { mutableIntStateOf(0) }
     var systemPrompt by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
     LaunchedEffect(Unit) {
         val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         var configsList = mutableListOf<String>()
@@ -267,26 +277,31 @@ fun MainUI(viewModel: ChatViewModel) {
                     })
                 }
                 if (openRenameDialog) {
+                    LaunchedEffect(Unit) {
+                        focusRequester.requestFocus()
+                    }
                     AlertDialog(
                         onDismissRequest = { openRenameDialog = false },
-                        title = { Text("重命名") },
+                        title = { Text("重命名对话") },
                         text = { OutlinedTextField(
                             value = newName,
-                            onValueChange = { newName = it }
+                            onValueChange = { newName = it },
+                            Modifier.focusRequester(focusRequester),
+                            textStyle = TextStyle(fontSize = 22.sp)
                         )},
                         confirmButton = {
                             TextButton(
                                 onClick = {
                                     openRenameDialog = false
                                     sessions.remove(currentSession)
-                                    sessions.add(newName)
+                                    sessions.add(newName.text)
                                     with (sessionsPref.edit()){
                                         putString("sessions",Gson().toJson(sessions))
                                         apply()
                                     }
                                     with(history.edit()) {
                                         remove(currentSession)
-                                        currentSession=newName
+                                        currentSession=newName.text
                                         putString(currentSession, Gson().toJson(viewModel.toList()).toString())
                                         apply()
                                     }
@@ -360,11 +375,15 @@ fun MainUI(viewModel: ChatViewModel) {
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary)
                             .clickable {
-                                scope.launch { drawerState.close() }
-                                viewModel.msgs.clear()
-                                viewModel.addSystemMessage(systemPrompt)
-                                currentSession = System.currentTimeMillis().toString()
-                                sessions.add(currentSession)
+                                if (viewModel.isLoading) {
+                                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    scope.launch { drawerState.close() }
+                                    viewModel.msgs.clear()
+                                    viewModel.addSystemMessage(systemPrompt)
+                                    currentSession = System.currentTimeMillis().toString()
+                                    sessions.add(currentSession)
+                                }
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -409,7 +428,7 @@ fun MainUI(viewModel: ChatViewModel) {
                             },
                             onLongClick = {
                                 editingSession=session
-                                newName=session
+                                newName= TextFieldValue(session, selection = TextRange(0,session.length))
                                 showHistoryMenu=true
                             }
                         )){

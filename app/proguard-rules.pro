@@ -19,8 +19,7 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
--keep class com.xjyzs.aiapi.** { *; }
-# 移除调试信息
--renamesourcefileattribute SourceFile
--keepattributes SourceFile,LineNumberTable
--dontpreverify
+
+
+# 移除日志
+-assumenosideeffects class android.util.Log { *; }

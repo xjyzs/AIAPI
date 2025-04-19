@@ -1,5 +1,3 @@
-import com.android.build.api.dsl.AndroidResources
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -18,7 +16,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        resourceConfigurations += listOf("zh")
+        androidResources. localeFilters+= listOf("zh")
     }
     signingConfigs {
         create("release") {
@@ -30,10 +28,6 @@ android {
         }
     }
 
-    fun AndroidResources.() {
-        noCompress("so","arsc")
-    }
-    
     flavorDimensions += "abi"
     productFlavors {
         create("x86") {
@@ -70,6 +64,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            packaging {
+                resources {
+                    excludes += setOf(
+                        "DebugProbesKt.bin",
+                        "kotlin-tooling-metadata.json",
+                        "okhttp3/**",
+                        "META-INF/*version*"
+                    )
+                }
+            }
+            androidResources {
+                noCompress += setOf("so", "arsc")
+            }
         }
     }
     compileOptions {
@@ -106,5 +113,5 @@ dependencies {
     implementation(libs.gson)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.compose.material:material:1.7.0")
+    implementation("androidx.compose.material:material:1.7.8")
 }
