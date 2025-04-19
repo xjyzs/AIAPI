@@ -92,7 +92,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -111,7 +110,7 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.gson)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.compose.material:material:1.7.8")
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.androidx.material)
 }
