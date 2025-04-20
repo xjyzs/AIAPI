@@ -8,6 +8,5 @@
         android:strokeColor="#000"
         android:strokeWidth="1"
         android:strokeMiterLimit="100"
-        android:name="矩形 1"
         android:pathData="m7 4h10c1.657 0 3 1.343 3 3v10c0 1.657 -1.343 3 -3 3h-10c-1.657 0 -3 -1.343 -3 -3v-10c0 -1.657 1.343 -3 3 -3z" />
 </vector>
