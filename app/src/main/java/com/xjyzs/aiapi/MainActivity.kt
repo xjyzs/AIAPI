@@ -3,7 +3,11 @@ package com.xjyzs.aiapi
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -207,6 +211,7 @@ fun MainUI(viewModel: ChatViewModel) {
     var containerHeight by remember { mutableIntStateOf(0) }
     var systemPrompt by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
+    val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
 
     LaunchedEffect(Unit) {
         val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -378,6 +383,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                 if (viewModel.isLoading) {
                                     Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
                                 } else {
+                                    clickVibrate(vibrator)
                                     scope.launch { drawerState.close() }
                                     viewModel.msgs.clear()
                                     viewModel.addSystemMessage(systemPrompt)
@@ -427,6 +433,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                 }
                             },
                             onLongClick = {
+                                clickVibrate(vibrator)
                                 editingSession=session
                                 newName= TextFieldValue(session, selection = TextRange(0,session.length))
                                 showHistoryMenu=true
@@ -461,13 +468,13 @@ fun MainUI(viewModel: ChatViewModel) {
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton({scope.launch { drawerState.open() }}) {
+                    IconButton({scope.launch { clickVibrate(vibrator);drawerState.open() }}) {
                         Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list),"")
                     }
                 },
                 title = { Text(stringResource(R.string.app_name)+"-"+currentConfig) },
                 actions = {
-                    IconButton(onClick = { showMenu = !showMenu }) {
+                    IconButton(onClick = { showMenu = !showMenu;clickVibrate(vibrator) }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = ""
@@ -489,6 +496,7 @@ fun MainUI(viewModel: ChatViewModel) {
                         DropdownMenuItem(
                             text = { Text("开启新对话") },
                             onClick = {
+                                clickVibrate(vibrator)
                                 showMenu = false
                                 if (viewModel.isLoading) {
                                     Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT)
@@ -514,16 +522,26 @@ fun MainUI(viewModel: ChatViewModel) {
                         viewModel.cancel=true
                     }else {
                         try {
-                            viewModel.addUserMessage(it)
-                            send(context, viewModel)
-                            viewModel.inputMsg = ""
-                            scope.launch { scrollState.animateScrollTo(contentHeight, tween(300)) }
+                            if (it.isNotEmpty()) {
+                                viewModel.addUserMessage(it)
+                                send(context, viewModel)
+                                viewModel.inputMsg = ""
+                                scope.launch {
+                                    scrollState.animateScrollTo(
+                                        contentHeight,
+                                        tween(300)
+                                    )
+                                }
+                            }else{
+                                Toast.makeText(context,"请输入你的问题", Toast.LENGTH_SHORT).show()
+                            }
                         }catch (e: Exception){
                             Toast.makeText(context,e.toString(), Toast.LENGTH_SHORT).show()
                         }
                     }
                 },
-                sendImg = if (sendImg==1){Icons.Default.ArrowUpward}else{ImageVector.vectorResource(R.drawable.ic_rectangle)}
+                sendImg = if (sendImg==1){Icons.Default.ArrowUpward}else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
+                vibrator
             )
         }
     ) { innerPadding ->
@@ -538,7 +556,7 @@ fun MainUI(viewModel: ChatViewModel) {
                 }) {
                 for (msg in viewModel.msgs){
                     when (msg.role) {
-                        "assistant" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n")}
+                        "assistant" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n") }
                         "assistant_reasoning" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n", color = Color.Gray)}
                         "user" -> Row {Text(msg.content+"\n", Modifier
                             .weight(1f)
@@ -559,7 +577,8 @@ fun MessageInputBar(
     msg: String,
     onMsgChange: (String) -> Unit,
     onSend: (String) -> Unit,
-    sendImg: ImageVector
+    sendImg: ImageVector,
+    vibrator: Vibrator
 ) {
     Surface(
         modifier = Modifier
@@ -583,7 +602,10 @@ fun MessageInputBar(
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
-                    .clickable { onSend(msg) },
+                    .clickable {
+                        clickVibrate(vibrator)
+                        onSend(msg)
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -672,5 +694,16 @@ private fun send(
                 viewModel.cancel=false
             }
         }
+    }
+}
+
+
+fun clickVibrate(vibrator: Vibrator){
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val attributes = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)
+        vibrator.vibrate(
+            VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK),
+            attributes
+        )
     }
 }
