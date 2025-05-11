@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -80,8 +81,13 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -556,7 +562,13 @@ fun MainUI(viewModel: ChatViewModel) {
                 }) {
                 for (msg in viewModel.msgs){
                     when (msg.role) {
-                        "assistant" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n") }
+                        "assistant" -> Row {Icon(Icons.Default.Api,"")
+                            InlineMarkdown(
+                            content = msg.content,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 16.dp)
+                        )}
                         "assistant_reasoning" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n", color = Color.Gray)}
                         "user" -> Row {Text(msg.content+"\n", Modifier
                             .weight(1f)
@@ -705,5 +717,114 @@ fun clickVibrate(vibrator: Vibrator){
             VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK),
             attributes
         )
+    }
+}
+
+class MarkdownParser {
+    // 块级元素正则表达式
+    private val headerRegex = """^(#{1,6})\s*(.*)""".toRegex()
+    private val unorderedListRegex = """^[*+-]\s+(.*)""".toRegex()
+    private val orderedListRegex = """^(\d+)\.\s+(.*)""".toRegex()
+
+    // 行内样式正则表达式
+    private val boldRegex = """\*\*(.*?)\*\*""".toRegex()
+    private val italicRegex = """\*(.*?)\*""".toRegex()
+    private val codeRegex = """`(.*?)`""".toRegex()
+
+    fun parse(content: String): List<@Composable () -> Unit> {
+        val blocks = mutableListOf<@Composable () -> Unit>()
+
+        content.split("\n").forEach { line ->
+            when {
+                line.matches(headerRegex) -> parseHeader(line)?.let { blocks.add(it) }
+                line.matches(unorderedListRegex) -> parseListItem(line)?.let { blocks.add(it) }
+                line.matches(orderedListRegex) -> parseOrderedListItem(line)?.let { blocks.add(it) }
+                else -> blocks.add { ParseInlineText(line) }
+            }
+        }
+
+        return blocks
+    }
+
+    private fun parseHeader(line: String): (@Composable () -> Unit)? {
+        val (hashes, text) = headerRegex.find(line)?.destructured ?: return null
+        val level = hashes.length.coerceIn(1, 6)
+        return {
+            Text(
+                text = parseInlineStyles(text),
+                fontSize = when (level) {
+                    1 -> 24.sp
+                    2 -> 22.sp
+                    else -> (20-level * 2).sp
+                },
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+
+    private fun parseListItem(line: String): (@Composable () -> Unit)? {
+        val (content) = unorderedListRegex.find(line)?.destructured ?: return null
+        return {
+            Row(verticalAlignment = Alignment.Top) {
+                Text("• ", fontSize = 16.sp)
+                Text(parseInlineStyles(content))
+            }
+        }
+    }
+
+    private fun parseOrderedListItem(line: String): (@Composable () -> Unit)? {
+        val (num, content) = orderedListRegex.find(line)?.destructured ?: return null
+        return {
+            Row(verticalAlignment = Alignment.Top) {
+                Text("$num. ", fontSize = 16.sp)
+                Text(parseInlineStyles(content))
+            }
+        }
+    }
+
+    @Composable
+    private fun ParseInlineText(text: String) {
+        Text(parseInlineStyles(text))
+    }
+
+    private fun parseInlineStyles(text: String): AnnotatedString {
+        val annotatedString = buildAnnotatedString {
+            append(text)
+
+            // 处理粗体
+            boldRegex.findAll(text).forEach { result ->
+                addStyle(SpanStyle(fontWeight = FontWeight.Bold), result.range.first,result.range.last)
+            }
+
+            // 处理斜体
+            italicRegex.findAll(text).forEach { result ->
+                addStyle(SpanStyle(fontStyle = FontStyle.Italic), result.range.first,result.range.last)
+            }
+
+            // 处理代码样式
+            codeRegex.findAll(text).forEach { result ->
+                addStyle(
+                    SpanStyle(
+                        background = Color.LightGray,
+                        fontFamily = FontFamily.Monospace
+                    ),
+                    result.range.first,result.range.last
+                )
+            }
+        }
+        return annotatedString
+    }
+}
+
+@Composable
+fun InlineMarkdown(content: String, modifier: Modifier = Modifier) {
+    val parser = remember { MarkdownParser() }
+    val blocks = remember(content) { parser.parse(content) }
+
+    Column(modifier) {
+        blocks.forEach { block ->
+            block()
+            Spacer(Modifier.height(4.dp))
+        }
     }
 }
