@@ -670,6 +670,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         }
                         with(history.edit()) {
                             remove(editingSession)
+                            apply()
                         }
                         if (viewModel.sessions.isEmpty()) {
                             viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
