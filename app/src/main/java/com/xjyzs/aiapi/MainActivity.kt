@@ -1,8 +1,10 @@
 package com.xjyzs.aiapi
 
+import android.adservices.topics.Topic
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationAttributes
@@ -15,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.annotation.Keep
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -90,8 +94,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -110,15 +118,18 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
+import androidx.core.content.edit
 
 @Keep
 data class Message(val role: String, val content: String)
 @SuppressLint("MutableCollectionMutableState")
 class ChatViewModel : ViewModel() {
     var msgs = mutableStateListOf<Message>()
+    var sessions=mutableStateListOf<String>()
     var isLoading by mutableStateOf(false)
     var inputMsg by mutableStateOf("")
     var cancel=false
+    var currentSession by mutableStateOf("")
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -134,11 +145,6 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun delMessage() {
-        if (msgs[msgs.size - 1].role == "user") {
-            msgs.removeAt(msgs.size - 1)
-        }
-    }
 
     fun updateAIMessage(content: String) {
         viewModelScope.launch(Dispatchers.Main) {
@@ -153,6 +159,9 @@ class ChatViewModel : ViewModel() {
 
     fun updateAIReasoningMessage(content: String) {
         viewModelScope.launch(Dispatchers.Main) {
+            if (msgs.last().role == "assistant" && msgs.last().content == ""){
+                msgs.removeAt(msgs.size-1)
+            }
             if (msgs.isEmpty() || msgs.last().role != "assistant_reasoning") {
                 msgs.add(Message("assistant_reasoning", content))
             } else {
@@ -192,34 +201,44 @@ class MainActivity : ComponentActivity() {
 var api_url = ""
 var api_key = ""
 var model=""
-var sessions=mutableListOf<String>()
+var systemPrompt=""
+var containerHeight=0
+var contentHeight=0
 @SuppressLint("CommitPrefEdits")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainUI(viewModel: ChatViewModel) {
-    var showMenu by remember { mutableStateOf(false) }
-    var showHistoryMenu by remember { mutableStateOf(false) }
-    var openRenameDialog by remember { mutableStateOf(false) }
-    var openDelDialog by remember { mutableStateOf(false) }
-    var editingSession by remember { mutableStateOf("") }
-    var newName by remember { mutableStateOf(TextFieldValue("")) }
     val context = LocalContext.current
     val history=context.getSharedPreferences("history", Context.MODE_PRIVATE)
     val scrollState = rememberScrollState()
-    var contentHeight by remember { mutableIntStateOf(0) }
     var sendImg by remember { mutableIntStateOf(1) }
     var drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
     val sessionsPref = context.getSharedPreferences("sessions", Context.MODE_PRIVATE)
-    var currentSession by remember { mutableStateOf("") }
     val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
     var currentConfig=currentConfigPref.getString("currentConfig","")
-    var containerHeight by remember { mutableIntStateOf(0) }
-    var systemPrompt by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
-    val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
+    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    val scope=rememberCoroutineScope()
+
+    //保存重要数据
+    val lifecycle = ProcessLifecycleOwner.get().lifecycle
+    val observer = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_STOP) {
+            if (viewModel.msgs.size>1) {
+                with(history.edit()) {
+                    putString(viewModel.currentSession, Gson().toJson(viewModel.toList()).toString())
+                    apply()
+                }
+                with(sessionsPref.edit()){
+                    putString("sessions",Gson().toJson(viewModel.sessions))
+                    apply()
+                }
+            }
+        }
+    }
+    lifecycle.addObserver(observer)
 
     LaunchedEffect(Unit) {
+        viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions","[]")!!,object : TypeToken<List<String>>() {}.type))
         val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         var configsList = mutableListOf<String>()
         currentConfig=currentConfigPref.getString("currentConfig","")!!
@@ -234,15 +253,14 @@ fun MainUI(viewModel: ChatViewModel) {
         ).asJsonObject
         api_url=settings.get("apiUrl").asString;api_key=settings.get("apiKey").asString;model=settings.get("model").asString;systemPrompt=settings.get("systemPrompt").asString
         api_url = if (api_url.endsWith("/")) {api_url+"chat/completions"} else {"$api_url/chat/completions"}
-        sessions= Gson().fromJson(sessionsPref.getString("sessions","[]")!!,object : TypeToken<MutableList<String>>() {}.type)
-        if (sessions.isEmpty()) {
-            sessions.add(System.currentTimeMillis().toString())
+        if (viewModel.sessions.isEmpty()) {
+            viewModel.sessions.add("新对话"+System.currentTimeMillis().toString())
         }
-        currentSession=sessions.last()
-        if (history.getString(currentSession,"")!!.isNotEmpty()) {
+        viewModel.currentSession=viewModel.sessions.last()
+        if (history.getString(viewModel.currentSession,"")!!.isNotEmpty()) {
             viewModel.fromList(
                 Gson().fromJson(
-                    history.getString(currentSession, "[]")!!,
+                    history.getString(viewModel.currentSession, "[]")!!,
                     Array<Message>::class.java
                 ).toMutableList()
             )
@@ -262,11 +280,11 @@ fun MainUI(viewModel: ChatViewModel) {
         sendImg = if (viewModel.isLoading){ 0 }else { 1 }
         if (viewModel.msgs.size>1) {
             with(history.edit()) {
-                putString(currentSession, Gson().toJson(viewModel.toList()).toString())
+                putString(viewModel.currentSession, Gson().toJson(viewModel.toList()).toString())
                 apply()
             }
             with(sessionsPref.edit()){
-                putString("sessions",Gson().toJson(sessions))
+                putString("sessions",Gson().toJson(viewModel.sessions))
                 apply()
             }
         }
@@ -277,247 +295,12 @@ fun MainUI(viewModel: ChatViewModel) {
             ModalDrawerSheet(
                 modifier = Modifier.width(250.dp)
             ) {
-                DropdownMenu(showHistoryMenu, onDismissRequest = {showHistoryMenu=false}) {
-                    DropdownMenuItem({ Text("重命名") },onClick = {
-                        showHistoryMenu=false
-                        openRenameDialog=true
-                    })
-                    DropdownMenuItem({ Text("删除") }, onClick = {
-                        showHistoryMenu=false
-                        openDelDialog=true
-                    })
-                }
-                if (openRenameDialog) {
-                    LaunchedEffect(Unit) {
-                        focusRequester.requestFocus()
-                    }
-                    AlertDialog(
-                        onDismissRequest = { openRenameDialog = false },
-                        title = { Text("重命名对话") },
-                        text = { OutlinedTextField(
-                            value = newName,
-                            onValueChange = { newName = it },
-                            Modifier.focusRequester(focusRequester),
-                            textStyle = TextStyle(fontSize = 22.sp)
-                        )},
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    openRenameDialog = false
-                                    sessions.remove(currentSession)
-                                    sessions.add(newName.text)
-                                    with (sessionsPref.edit()){
-                                        putString("sessions",Gson().toJson(sessions))
-                                        apply()
-                                    }
-                                    with(history.edit()) {
-                                        remove(currentSession)
-                                        currentSession=newName.text
-                                        putString(currentSession, Gson().toJson(viewModel.toList()).toString())
-                                        apply()
-                                    }
-                                }
-                            ) { Text("完成") }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { openRenameDialog = false }
-                            ) { Text("取消") }
-                        }
-                    )
-                }
-                if (openDelDialog){
-                    AlertDialog(
-                        onDismissRequest = { openDelDialog = false },
-                        title = { Text("永久删除对话") },
-                        text = { Text("删除后，该对话将不可恢复。确认删除吗？") },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    openDelDialog = false
-                                    sessions.remove(currentSession)
-                                    with (sessionsPref.edit()){
-                                        putString("sessions",Gson().toJson(sessions))
-                                        apply()
-                                    }
-                                    if (sessions.isEmpty()) {
-                                        sessions.add(System.currentTimeMillis().toString())
-                                    }
-                                    currentSession=sessions.last()
-                                    if (history.getString(currentSession, "")!!.isNotEmpty()) {
-                                        viewModel.fromList(
-                                            Gson().fromJson(
-                                                history.getString(currentSession, "[]")!!,
-                                                Array<Message>::class.java
-                                            ).toMutableList()
-                                        )
-                                    } else {
-                                        viewModel.msgs.clear()
-                                        if (systemPrompt.isNotEmpty()) {
-                                            viewModel.addSystemMessage(systemPrompt)
-                                        }
-                                    }
-                                    if (systemPrompt.isNotEmpty()) {
-                                        viewModel.addSystemMessage(systemPrompt)
-                                    }
-                                    scope.launch {
-                                        scrollState.scrollTo(0)
-                                        delay(100)
-                                        scrollState.animateScrollTo(contentHeight, tween(500))
-                                    }
-                                }
-                            ) { Text("删除") }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    openDelDialog = false
-                                }
-                            ) { Text("取消") }
-                        }
-                    )
-                }
-                Row(Modifier.padding(16.dp)) {
-                    Text("对话记录", fontSize = 24.sp)
-                    Spacer(Modifier.weight(1f))
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .clickable {
-                                if (viewModel.isLoading) {
-                                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    clickVibrate(vibrator)
-                                    scope.launch { drawerState.close() }
-                                    viewModel.msgs.clear()
-                                    viewModel.addSystemMessage(systemPrompt)
-                                    currentSession = System.currentTimeMillis().toString()
-                                    sessions.add(currentSession)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AddCircle,
-                            contentDescription = "",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(24.dp))
-                    }
-                }
-                LazyColumn {
-                    itemsIndexed(sessions.reversed()) { _,session ->
-                        Box(modifier = Modifier.combinedClickable(
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                if (viewModel.isLoading) {
-                                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    currentSession = session
-                                    if (history.getString(currentSession, "")!!.isNotEmpty()) {
-                                        viewModel.fromList(
-                                            Gson().fromJson(
-                                                history.getString(currentSession, "[]")!!,
-                                                Array<Message>::class.java
-                                            ).toMutableList()
-                                        )
-                                    } else {
-                                        viewModel.msgs.clear()
-                                        if (systemPrompt.isNotEmpty()) {
-                                            viewModel.addSystemMessage(systemPrompt)
-                                        }
-                                    }
-                                    if (systemPrompt.isNotEmpty()) {
-                                        viewModel.addSystemMessage(systemPrompt)
-                                    }
-                                    scope.launch {
-                                        scrollState.scrollTo(0)
-                                        delay(100)
-                                        scrollState.animateScrollTo(contentHeight, tween(500))
-                                    }
-                                }
-                            },
-                            onLongClick = {
-                                clickVibrate(vibrator)
-                                editingSession=session
-                                newName= TextFieldValue(session, selection = TextRange(0,session.length))
-                                showHistoryMenu=true
-                            }
-                        )){
-                            if (session==currentSession) {
-                                Text(
-                                    session,
-                                    Modifier
-                                        .padding(16.dp)
-                                        .fillMaxWidth(),
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }else{
-                                Text(
-                                    session,
-                                    Modifier
-                                        .padding(16.dp)
-                                        .fillMaxWidth(),
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Normal
-                                )
-                            }
-                        }
-                    }
-                }
+                HistoryDrawer(viewModel,context,sessionsPref,history,scrollState,drawerState,vibrator)
             }
         },
         content = { Scaffold(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton({scope.launch { clickVibrate(vibrator);drawerState.open() }}) {
-                        Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list),"")
-                    }
-                },
-                title = { Text(stringResource(R.string.app_name)+"-"+currentConfig) },
-                actions = {
-                    IconButton(onClick = { showMenu = !showMenu;clickVibrate(vibrator) }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = ""
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("设置") },
-                            onClick = {
-                                showMenu = false
-                                val intent=Intent(context,SettingsActivity::class.java)
-                                context.startActivity(intent)
-                                (context as ComponentActivity).finish()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("开启新对话") },
-                            onClick = {
-                                clickVibrate(vibrator)
-                                showMenu = false
-                                if (viewModel.isLoading) {
-                                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT)
-                                        .show()
-                                } else {
-                                    viewModel.msgs.clear()
-                                    viewModel.addSystemMessage(systemPrompt)
-                                    currentSession = System.currentTimeMillis().toString()
-                                    sessions.add(currentSession)
-                                }
-                            }
-                        )
-                    }
-                }
-            )
+            TopBar(viewModel,context,drawerState,currentConfig!!,vibrator)
         },
         bottomBar = {
             MessageInputBar(
@@ -529,6 +312,22 @@ fun MainUI(viewModel: ChatViewModel) {
                     }else {
                         try {
                             if (it.isNotEmpty()) {
+                                if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
+                                    val withoutEnter=it.replace("\n","")
+                                    val newName=if (withoutEnter.length>20){withoutEnter.substring(0,20)}else{withoutEnter}
+                                    viewModel.sessions.add(newName)
+                                    viewModel.sessions.remove(viewModel.currentSession)
+                                    with (sessionsPref.edit()){
+                                        putString("sessions",Gson().toJson(viewModel.sessions))
+                                        apply()
+                                    }
+                                    with(history.edit()) {
+                                        putString(newName, Gson().toJson(viewModel.toList()).toString())
+                                        remove(viewModel.currentSession)
+                                        apply()
+                                    }
+                                    viewModel.currentSession=newName
+                                }
                                 viewModel.addUserMessage(it)
                                 send(context, viewModel)
                                 viewModel.inputMsg = ""
@@ -546,8 +345,8 @@ fun MainUI(viewModel: ChatViewModel) {
                         }
                     }
                 },
-                sendImg = if (sendImg==1){Icons.Default.ArrowUpward}else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
-                vibrator
+                sendImg = if (sendImg==1){Icons.Default.ArrowUpward}
+                else{ImageVector.vectorResource(R.drawable.ic_rectangle)}, vibrator
             )
         }
     ) { innerPadding ->
@@ -636,6 +435,7 @@ private fun send(
     viewModel: ChatViewModel
 ) {
     viewModel.isLoading = true
+    viewModel.updateAIMessage("")
     val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
@@ -694,11 +494,10 @@ private fun send(
                 println(e.toString())
                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 if (viewModel.msgs.isNotEmpty()) {
-                    if (viewModel.msgs.last().role == "user") {
-                        viewModel.inputMsg = viewModel.msgs.last().content
+                    if (viewModel.msgs[viewModel.msgs.size-2].role == "user") {
+                        viewModel.inputMsg = viewModel.msgs[viewModel.msgs.size-2].content
                     }
                 }
-                viewModel.delMessage()
             }
         } finally {
             withContext(Dispatchers.Main) {
@@ -709,6 +508,264 @@ private fun send(
     }
 }
 
+@SuppressLint("CommitPrefEdits")
+@Composable
+private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPref: SharedPreferences, history: SharedPreferences, scrollState: ScrollState, drawerState: DrawerState, vibrator: Vibrator) {
+    var showHistoryMenu by remember { mutableStateOf(false) }
+    var openRenameDialog by remember { mutableStateOf(false) }
+    var openDelDialog by remember { mutableStateOf(false) }
+    var editingSession by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf(TextFieldValue("")) }
+    val focusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    DropdownMenu(showHistoryMenu, onDismissRequest = { showHistoryMenu = false }) {
+        DropdownMenuItem({ Text("重命名") }, onClick = {
+            showHistoryMenu = false
+            openRenameDialog = true
+        })
+        DropdownMenuItem({ Text("删除") }, onClick = {
+            showHistoryMenu = false
+            openDelDialog = true
+        })
+    }
+    if (openRenameDialog) {
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+        AlertDialog(
+            onDismissRequest = { openRenameDialog = false },
+            title = { Text("重命名对话") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    Modifier.focusRequester(focusRequester),
+                    textStyle = TextStyle(fontSize = 22.sp)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        openRenameDialog = false
+                        viewModel.sessions.remove(editingSession)
+                        viewModel.sessions.add(newName.text)
+                        with(sessionsPref.edit()) {
+                            putString("sessions", Gson().toJson(viewModel.sessions))
+                            apply()
+                        }
+                        with(history.edit()) {
+                            putString(newName.text, history.getString(editingSession, null))
+                            remove(editingSession)
+                            apply()
+                        }
+                    }
+                ) { Text("完成") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { openRenameDialog = false }
+                ) { Text("取消") }
+            }
+        )
+    }
+    if (openDelDialog) {
+        AlertDialog(
+            onDismissRequest = { openDelDialog = false },
+            title = { Text("永久删除对话") },
+            text = { Text("删除后，该对话将不可恢复。确认删除吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        openDelDialog = false
+                        viewModel.sessions.remove(editingSession)
+                        with(sessionsPref.edit()) {
+                            putString("sessions", Gson().toJson(viewModel.sessions))
+                            apply()
+                        }
+                        with(history.edit()) {
+                            remove(editingSession)
+                        }
+                        if (viewModel.sessions.isEmpty()) {
+                            viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
+                            viewModel.currentSession = viewModel.sessions.last()
+                        }
+                        if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
+                            viewModel.fromList(
+                                Gson().fromJson(
+                                    history.getString(viewModel.currentSession, "[]")!!,
+                                    Array<Message>::class.java
+                                ).toMutableList()
+                            )
+                        } else {
+                            viewModel.msgs.clear()
+                        }
+                        if (systemPrompt.isNotEmpty()) {
+                            viewModel.addSystemMessage(systemPrompt)
+                        }
+                        scope.launch {
+                            scrollState.scrollTo(0)
+                            delay(100)
+                            scrollState.animateScrollTo(contentHeight, tween(500))
+                        }
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        openDelDialog = false
+                    }
+                ) { Text("取消") }
+            }
+        )
+    }
+    Row(Modifier.padding(16.dp)) {
+        Text("对话记录", fontSize = 24.sp)
+        Spacer(Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable {
+                    if (viewModel.isLoading) {
+                        Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
+                    } else {
+                        clickVibrate(vibrator)
+                        scope.launch { drawerState.close() }
+                        createNewSession(viewModel, context)
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.AddCircle,
+                contentDescription = "",
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+    LazyColumn {
+        itemsIndexed(viewModel.sessions.reversed()) { _, session ->
+            Box(
+                modifier = Modifier.combinedClickable(
+                onClick = {
+                    scope.launch { drawerState.close() }
+                    if (viewModel.isLoading) {
+                        Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
+                    } else {
+                        viewModel.currentSession = session
+                        if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
+                            viewModel.fromList(
+                                Gson().fromJson(
+                                    history.getString(viewModel.currentSession, "[]")!!,
+                                    Array<Message>::class.java
+                                ).toMutableList()
+                            )
+                        } else {
+                            viewModel.msgs.clear()
+                            if (systemPrompt.isNotEmpty()) {
+                                viewModel.addSystemMessage(systemPrompt)
+                            }
+                        }
+                        if (systemPrompt.isNotEmpty()) {
+                            viewModel.addSystemMessage(systemPrompt)
+                        }
+                        scope.launch {
+                            scrollState.scrollTo(0)
+                            delay(100)
+                            scrollState.animateScrollTo(contentHeight, tween(500))
+                        }
+                    }
+                },
+                onLongClick = {
+                    clickVibrate(vibrator)
+                    editingSession = session
+                    newName = TextFieldValue(session, selection = TextRange(0, session.length))
+                    showHistoryMenu = true
+                }
+            )) {
+                Text(
+                    session,
+                    Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = if (session == viewModel.currentSession) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Unspecified
+                    },
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator){
+    val scope=rememberCoroutineScope()
+    var showMenu by remember { mutableStateOf(false) }
+    TopAppBar(
+        navigationIcon = {
+            IconButton({scope.launch { clickVibrate(vibrator);drawerState.open() }}) {
+                Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list),null)
+            }
+        },
+        title = {
+            Column {
+                Text(if (viewModel.currentSession.isNotEmpty()){viewModel.currentSession}else{stringResource(R.string.app_name)}, maxLines = 1)
+                Text(text = currentConfig,
+                    color = Color.Gray,
+                    fontSize = 12.sp, lineHeight = 12.sp)
+            }
+        },
+        actions = {
+            IconButton(onClick = { showMenu = !showMenu;clickVibrate(vibrator) }) {
+                Icon(imageVector = Icons.Default.MoreVert,null)
+            }
+            DropdownMenu(showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("设置") },
+                    onClick = {
+                        showMenu = false
+                        val intent=Intent(context,SettingsActivity::class.java)
+                        context.startActivity(intent)
+                        (context as ComponentActivity).finish()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("开启新对话") },
+                    onClick = {
+                        clickVibrate(vibrator)
+                        showMenu = false
+                        if (viewModel.isLoading) {
+                            Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT)
+                                .show()
+                        } else {
+                            createNewSession(viewModel,context)
+                        }
+                    }
+                )
+            }
+        }
+    )
+}
+
+private fun createNewSession(viewModel: ChatViewModel,context: Context) {
+    if (viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") {
+        Toast.makeText(context, "已在新对话中", Toast.LENGTH_SHORT).show()
+    } else {
+        viewModel.msgs.clear()
+        viewModel.addSystemMessage(systemPrompt)
+        viewModel.currentSession = "新对话" + System.currentTimeMillis().toString()
+        viewModel.sessions.add(viewModel.currentSession)
+    }
+}
 
 fun clickVibrate(vibrator: Vibrator){
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -730,6 +787,7 @@ class MarkdownParser {
     private val boldRegex = """\*\*(.*?)\*\*""".toRegex()
     private val italicRegex = """\*(.*?)\*""".toRegex()
     private val codeRegex = """`(.*?)`""".toRegex()
+    private val deleteRegex = """~~(.*?)~~""".toRegex()
 
     fun parse(content: String): List<@Composable () -> Unit> {
         val blocks = mutableListOf<@Composable () -> Unit>()
@@ -793,12 +851,17 @@ class MarkdownParser {
 
             // 处理粗体
             boldRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(fontWeight = FontWeight.Bold), result.range.first,result.range.last)
+                addStyle(SpanStyle(fontWeight = FontWeight.Bold), result.range.first+1,result.range.last)
             }
 
             // 处理斜体
             italicRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(fontStyle = FontStyle.Italic), result.range.first,result.range.last)
+                addStyle(SpanStyle(fontStyle = FontStyle.Italic), result.range.first+1,result.range.last)
+            }
+
+            // 处理删除线
+            deleteRegex.findAll(text).forEach { result ->
+                addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), result.range.first+1,result.range.last)
             }
 
             // 处理代码样式
@@ -808,7 +871,7 @@ class MarkdownParser {
                         background = Color.LightGray,
                         fontFamily = FontFamily.Monospace
                     ),
-                    result.range.first,result.range.last
+                    result.range.first+1,result.range.last
                 )
             }
         }
