@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -94,7 +95,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -409,19 +409,46 @@ fun MainUI(viewModel: ChatViewModel) {
                                 Icon(
                                     Icons.Default.Api,
                                     ""
-                                );Text(msg.content + "\n", color = Color.Gray)
+                                );Text(msg.content, color = Color.Gray)
                             }
 
-                            "user" -> Row {
-                                Text(
-                                    msg.content + "\n", Modifier
-                                        .weight(1f)
-                                        .wrapContentWidth(
-                                            Alignment.End
-                                        )
-                                );Icon(Icons.Default.AccountCircle, "")
+                            "user" -> {
+                                Row {
+                                    Text(
+                                        msg.content, Modifier
+                                            .weight(1f)
+                                            .wrapContentWidth(
+                                                Alignment.End
+                                            )
+                                    );Icon(Icons.Default.AccountCircle, "")
+                                }
+                                Row(Modifier.align(Alignment.End).padding(end = 24.dp)) {
+                                    if (!viewModel.isLoading) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.background)
+                                                .clickable {
+                                                    clickVibrate(vibrator)
+                                                    viewModel.inputMsg =
+                                                        viewModel.msgs[i].content
+                                                    viewModel.msgs.removeRange(
+                                                        i,
+                                                        viewModel.msgs.size
+                                                    )
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
-
                             else -> Row {
                                 Icon(
                                     Icons.Default.Settings,
