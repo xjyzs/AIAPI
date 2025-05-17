@@ -1,6 +1,5 @@
 package com.xjyzs.aiapi
 
-import android.adservices.topics.Topic
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -45,6 +44,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
@@ -94,6 +94,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -118,7 +119,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
-import androidx.core.content.edit
 
 @Keep
 data class Message(val role: String, val content: String)
@@ -314,7 +314,10 @@ fun MainUI(viewModel: ChatViewModel) {
                             if (it.isNotEmpty()) {
                                 if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
                                     val withoutEnter=it.replace("\n","")
-                                    val newName=if (withoutEnter.length>20){withoutEnter.substring(0,20)}else{withoutEnter}
+                                    var newName=if (withoutEnter.length>20){withoutEnter.substring(0,20)}else{withoutEnter}
+                                    if (newName in viewModel.sessions){
+                                        newName=newName+System.currentTimeMillis().toString()
+                                    }
                                     viewModel.sessions.add(newName)
                                     viewModel.sessions.remove(viewModel.currentSession)
                                     with (sessionsPref.edit()){
@@ -350,36 +353,86 @@ fun MainUI(viewModel: ChatViewModel) {
             )
         }
     ) { innerPadding ->
-        SelectionContainer(Modifier.onSizeChanged{size->
-            containerHeight=size.height
-        }) {
-            Column(modifier = Modifier
-                .padding(innerPadding)
-                .verticalScroll(scrollState)
-                .onSizeChanged { size ->
-                    contentHeight = size.height
-                }) {
-                for (msg in viewModel.msgs){
-                    when (msg.role) {
-                        "assistant" -> Row {Icon(Icons.Default.Api,"")
-                            InlineMarkdown(
-                            content = msg.content,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 16.dp)
-                        )}
-                        "assistant_reasoning" -> Row {Icon(Icons.Default.Api,"");Text(msg.content+"\n", color = Color.Gray)}
-                        "user" -> Row {Text(msg.content+"\n", Modifier
-                            .weight(1f)
-                            .wrapContentWidth(
-                                Alignment.End
-                            ));Icon(Icons.Default.AccountCircle,"")}
-                        else -> Row {Icon(Icons.Default.Settings,"");Text(msg.content+"\n")}
+            SelectionContainer(Modifier.onSizeChanged { size ->
+                containerHeight = size.height
+            }) {
+                Column(
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .verticalScroll(scrollState)
+                        .onSizeChanged { size ->
+                            contentHeight = size.height
+                        }) {
+                    viewModel.msgs.forEachIndexed { i, msg ->
+                        when (msg.role) {
+                            "assistant" -> {
+                                Row {
+                                    Icon(Icons.Default.Api, "")
+                                    InlineMarkdown(
+                                        content = msg.content,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(end = 16.dp)
+                                    )
+                                }
+                                Row(Modifier.align(Alignment.End).padding(end = 24.dp)) {
+                                    if (viewModel.msgs[i].content.isNotEmpty() && !viewModel.isLoading) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.background)
+                                                .clickable {
+                                                    clickVibrate(vibrator)
+                                                    viewModel.msgs.removeRange(
+                                                        if (viewModel.msgs[i - 1].role == "assistant_reasoning") {
+                                                            i - 1
+                                                        } else {
+                                                            i
+                                                        }, viewModel.msgs.size
+                                                    )
+                                                    send(context, viewModel)
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            "assistant_reasoning" -> Row {
+                                Icon(
+                                    Icons.Default.Api,
+                                    ""
+                                );Text(msg.content + "\n", color = Color.Gray)
+                            }
+
+                            "user" -> Row {
+                                Text(
+                                    msg.content + "\n", Modifier
+                                        .weight(1f)
+                                        .wrapContentWidth(
+                                            Alignment.End
+                                        )
+                                );Icon(Icons.Default.AccountCircle, "")
+                            }
+
+                            else -> Row {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    ""
+                                );Text(msg.content + "\n")
+                            }
+                        }
                     }
                 }
             }
         }
-    }
 })
 }
 
@@ -435,6 +488,7 @@ private fun send(
     viewModel: ChatViewModel
 ) {
     viewModel.isLoading = true
+    viewModel.cancel=false
     viewModel.updateAIMessage("")
     val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.SECONDS)
@@ -547,14 +601,19 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                 TextButton(
                     onClick = {
                         openRenameDialog = false
+                        var newName1=newName.text
+                        if (newName1 in viewModel.sessions){
+                            newName1=newName1+System.currentTimeMillis().toString()
+                        }
+                        viewModel.sessions.add(newName1)
                         viewModel.sessions.remove(editingSession)
-                        viewModel.sessions.add(newName.text)
+
                         with(sessionsPref.edit()) {
                             putString("sessions", Gson().toJson(viewModel.sessions))
                             apply()
                         }
                         with(history.edit()) {
-                            putString(newName.text, history.getString(editingSession, null))
+                            putString(newName1, history.getString(editingSession, null))
                             remove(editingSession)
                             apply()
                         }
