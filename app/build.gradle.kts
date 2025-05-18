@@ -81,9 +81,8 @@ android {
                         "DebugProbesKt.bin",
                         "kotlin-tooling-metadata.json",
                         "okhttp3/**",
-                        "META-INF/*version*",
-                        "META-INF/androidx/**",
-                        "META-INF/**"
+                        "META-INF/**",
+                        "kotlin/**"
                     )
                 }
             }
