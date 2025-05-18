@@ -40,6 +40,7 @@ android {
             signingConfigs.getByName("release")
         } else {
             signingConfigs.getByName("debug")
+        }
         create("x86") {
             dimension = "abi"
             ndk { abiFilters.add("x86") }
