@@ -19,40 +19,50 @@ android {
         androidResources. localeFilters+= listOf("zh")
     }
     signingConfigs {
-        create("release") {
-            storeFile = file("${project.rootDir}/keystore.jks")
-            storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-            enableV1Signing=false
+        val hasSigningInfo = System.getenv("KEY_STORE_PASSWORD") != null &&
+            System.getenv("KEY_ALIAS") != null &&
+            System.getenv("KEY_PASSWORD") != null &&
+            file("${project.rootDir}/keystore.jks").exists()
+        if (hasSigningInfo) {
+            create("release") {
+                storeFile = file("${project.rootDir}/keystore.jks")
+                storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+                enableV1Signing=false
+            }
         }
     }
 
     flavorDimensions += "abi"
     productFlavors {
+        val releaseSigningConfig = if (signingConfigs.findByName("release") != null) {
+            signingConfigs.getByName("release")
+        } else {
+            signingConfigs.getByName("debug")
         create("x86") {
             dimension = "abi"
             ndk { abiFilters.add("x86") }
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigningConfig
         }
         create("x86_64") {
             dimension = "abi"
             ndk { abiFilters.add("x86_64") }
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigningConfig
         }
         create("arm") {
             dimension = "abi"
             ndk { abiFilters.add("armeabi-v7a") }
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigningConfig
         }
         create("arm64") {
             dimension = "abi"
             ndk { abiFilters.add("arm64-v8a") }
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigningConfig
         }
         create("universal") {
             dimension = "abi"
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigningConfig
         }
     }
 
@@ -70,7 +80,9 @@ android {
                         "DebugProbesKt.bin",
                         "kotlin-tooling-metadata.json",
                         "okhttp3/**",
-                        "META-INF/*version*"
+                        "META-INF/*version*",
+                        "META-INF/androidx/**",
+                        "META-INF/**"
                     )
                 }
             }
