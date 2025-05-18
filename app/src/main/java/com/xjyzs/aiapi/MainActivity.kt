@@ -869,7 +869,7 @@ fun clickVibrate(vibrator: Vibrator){
 
 class MarkdownParser {
     // 代码块
-    private val codeBlockRegex = """```(.*?)\n([\s\S]*?)```""".toRegex()
+    private val codeBlockRegex = """```(.*?)\n([\s\S]*?)\s*```""".toRegex()
     // 块级元素正则表达式
     private val headerRegex = """^(#{1,6})\s*(.*)""".toRegex()
     private val unorderedListRegex = """^[*+-]\s+(.*)""".toRegex()
