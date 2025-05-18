@@ -21,5 +21,6 @@
 #-renamesourcefileattribute SourceFile
 
 
-# 移除日志
--assumenosideeffects class android.util.Log { *; }
+-assumenosideeffects class kotlin.reflect.jvm.internal.impl.builtins.BuiltInsLoader {
+    *;
+}
