@@ -1,6 +1,7 @@
 package com.xjyzs.aiapi
 
 import android.annotation.SuppressLint
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -25,7 +26,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -96,6 +97,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -238,6 +240,7 @@ fun MainUI(viewModel: ChatViewModel) {
     lifecycle.addObserver(observer)
 
     LaunchedEffect(Unit) {
+        viewModel.sessions.clear()
         viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions","[]")!!,object : TypeToken<List<String>>() {}.type))
         val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         var configsList = mutableListOf<String>()
@@ -372,7 +375,8 @@ fun MainUI(viewModel: ChatViewModel) {
                                         content = msg.content,
                                         modifier = Modifier
                                             .weight(1f)
-                                            .padding(end = 16.dp)
+                                            .padding(end = 16.dp),
+                                        context
                                     )
                                 }
                                 Row(Modifier.align(Alignment.End).padding(end = 24.dp)) {
@@ -423,29 +427,29 @@ fun MainUI(viewModel: ChatViewModel) {
                                     );Icon(Icons.Default.AccountCircle, "")
                                 }
                                 Row(Modifier.align(Alignment.End).padding(end = 24.dp)) {
-                                    if (!viewModel.isLoading) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.background)
-                                                .clickable {
-                                                    clickVibrate(vibrator)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.background)
+                                            .clickable {
+                                                clickVibrate(vibrator)
+                                                if (!viewModel.isLoading) {
                                                     viewModel.inputMsg =
                                                         viewModel.msgs[i].content
                                                     viewModel.msgs.removeRange(
                                                         i,
                                                         viewModel.msgs.size
                                                     )
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Edit,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp)
+                                        )
                                     }
                                 }
                             }
@@ -572,7 +576,6 @@ private fun send(
             }
         } catch (e: Exception) {
             withContext(Dispatchers.Main) {
-                println(e.toString())
                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 if (viewModel.msgs.isNotEmpty()) {
                     if (viewModel.msgs[viewModel.msgs.size-2].role == "user") {
@@ -865,6 +868,8 @@ fun clickVibrate(vibrator: Vibrator){
 }
 
 class MarkdownParser {
+    // 代码块
+    private val codeBlockRegex = """```(.*?)\n([\s\S]*?)```""".toRegex()
     // 块级元素正则表达式
     private val headerRegex = """^(#{1,6})\s*(.*)""".toRegex()
     private val unorderedListRegex = """^[*+-]\s+(.*)""".toRegex()
@@ -876,20 +881,122 @@ class MarkdownParser {
     private val codeRegex = """`(.*?)`""".toRegex()
     private val deleteRegex = """~~(.*?)~~""".toRegex()
 
-    fun parse(content: String): List<@Composable () -> Unit> {
+    fun parse(content: String,context: Context): List<@Composable () -> Unit> {
         val blocks = mutableListOf<@Composable () -> Unit>()
 
-        content.split("\n").forEach { line ->
-            when {
-                line.matches(headerRegex) -> parseHeader(line)?.let { blocks.add(it) }
-                line.matches(unorderedListRegex) -> parseListItem(line)?.let { blocks.add(it) }
-                line.matches(orderedListRegex) -> parseOrderedListItem(line)?.let { blocks.add(it) }
-                else -> blocks.add { ParseInlineText(line) }
+        var remainingText = content
+
+        while (true) {
+            val codeBlockMatch = codeBlockRegex.find(remainingText)
+
+            val precedingText = if (codeBlockMatch != null) {
+                remainingText.substring(0, codeBlockMatch.range.first)
+            } else {
+                remainingText
             }
+            parseRegularText(precedingText, blocks)
+            if (codeBlockMatch == null) break
+            val (language, code) = codeBlockMatch.destructured
+            blocks.add { CodeBlock(code, language,context=context) }
+
+            remainingText = remainingText.substring(codeBlockMatch.range.last + 1)
         }
 
         return blocks
     }
+
+    private fun parseRegularText(text: String, blocks: MutableList<@Composable () -> Unit>) {
+        text.split("\n").forEach { line ->
+            when {
+                line.matches(headerRegex) -> parseHeader(line)?.let { blocks.add(it) }
+                line.matches(unorderedListRegex) -> parseListItem(line)?.let { blocks.add(it) }
+                line.matches(orderedListRegex) -> parseOrderedListItem(line)?.let {
+                    blocks.add(it)
+                }
+
+                else -> blocks.add { ParseInlineText(line) }
+            }
+        }
+    }
+
+    @Composable
+    fun CodeBlock(
+        code: String,
+        language: String = "",
+        modifier: Modifier = Modifier,
+        backgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        cornerRadius: Dp = 8.dp,
+        context: Context
+    ) {
+        val typography = MaterialTheme.typography
+
+        Surface(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clickable { (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setText(AnnotatedString(code)) },
+            shape = RoundedCornerShape(cornerRadius),
+            color = backgroundColor
+        ) {
+            Column {
+                if (language.isNotBlank()) {
+                    Text(
+                        text = language,
+                        style = typography.labelSmall,
+                        modifier = Modifier
+                            .padding(start = 12.dp, top = 8.dp, end = 12.dp)
+                            .align(Alignment.Start),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = highlightSyntax(code, language),
+                    style = typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 20.sp
+                    ),
+                    modifier = Modifier
+                        .padding(12.dp),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+
+    fun highlightSyntax(code: String, language: String): AnnotatedString {
+        return buildAnnotatedString {
+            append(code)
+
+            val green = listOf("\".*?\"","'.*?'")
+            green.forEach { re ->
+                val regex=re.toRegex()
+                regex.findAll(code).forEach { match ->
+                    addStyle(
+                        SpanStyle(color = Color(0xFF067D17)),
+                        match.range.first,
+                        match.range.last + 1
+                    )
+                }
+            }
+
+            when (language.lowercase()) {
+                "kotlin" -> {
+                    val red = listOf("fun", "val", "var", "class", "return")
+                    red.forEach { kw ->
+                        val regex = "\\b$kw\\b".toRegex()
+                        regex.findAll(code).forEach { match ->
+                            addStyle(
+                                SpanStyle(color = Color(0xFFD32F2F)),
+                                match.range.first,
+                                match.range.last + 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     private fun parseHeader(line: String): (@Composable () -> Unit)? {
         val (hashes, text) = headerRegex.find(line)?.destructured ?: return null
@@ -899,8 +1006,7 @@ class MarkdownParser {
                 text = parseInlineStyles(text),
                 fontSize = when (level) {
                     1 -> 24.sp
-                    2 -> 22.sp
-                    else -> (20-level * 2).sp
+                    else -> (24-level * 1).sp
                 },
                 fontWeight = FontWeight.Bold
             )
@@ -932,6 +1038,7 @@ class MarkdownParser {
         Text(parseInlineStyles(text))
     }
 
+    @Composable
     private fun parseInlineStyles(text: String): AnnotatedString {
         val annotatedString = buildAnnotatedString {
             append(text)
@@ -955,7 +1062,7 @@ class MarkdownParser {
             codeRegex.findAll(text).forEach { result ->
                 addStyle(
                     SpanStyle(
-                        background = Color.LightGray,
+                        background = MaterialTheme.colorScheme.surfaceContainerHighest,
                         fontFamily = FontFamily.Monospace
                     ),
                     result.range.first+1,result.range.last
@@ -967,14 +1074,16 @@ class MarkdownParser {
 }
 
 @Composable
-fun InlineMarkdown(content: String, modifier: Modifier = Modifier) {
+fun InlineMarkdown(content: String, modifier: Modifier = Modifier,context: Context) {
     val parser = remember { MarkdownParser() }
-    val blocks = remember(content) { parser.parse(content) }
+    val blocks = remember(content) { parser.parse(content, context) }
 
     Column(modifier) {
         blocks.forEach { block ->
-            block()
-            Spacer(Modifier.height(4.dp))
+            Row {
+                block()
+                Text("\n", lineHeight = 0.sp)
+            }
         }
     }
 }
