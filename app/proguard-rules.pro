@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# 移除调试信息
+-checkdiscard class kotlin.Metadata
+-assumenosideeffects public class kotlin.coroutines.jvm.internal.BaseContinuationImpl {
+    public java.lang.StackTraceElement getStackTraceElement() return null;
+}
+-checkdiscard class kotlin.coroutines.jvm.internal.DebugMetadata
