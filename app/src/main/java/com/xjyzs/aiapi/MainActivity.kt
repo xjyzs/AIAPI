@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -132,6 +134,7 @@ class ChatViewModel : ViewModel() {
     var inputMsg by mutableStateOf("")
     var cancel=false
     var currentSession by mutableStateOf("")
+    var parseMd by mutableStateOf(true)
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -303,7 +306,7 @@ fun MainUI(viewModel: ChatViewModel) {
         },
         content = { Scaffold(
         topBar = {
-            TopBar(viewModel,context,drawerState,currentConfig!!,vibrator)
+            TopBar(viewModel,context,drawerState,if(currentConfig!!.isNotEmpty()){currentConfig}else{"请先配置 AI API"},vibrator)
         },
         bottomBar = {
             MessageInputBar(
@@ -334,14 +337,19 @@ fun MainUI(viewModel: ChatViewModel) {
                                     }
                                     viewModel.currentSession=newName
                                 }
-                                viewModel.addUserMessage(it)
-                                send(context, viewModel)
-                                viewModel.inputMsg = ""
-                                scope.launch {
-                                    scrollState.animateScrollTo(
-                                        contentHeight,
-                                        tween(300)
-                                    )
+                                if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
+                                    viewModel.addUserMessage(it)
+                                    send(context, viewModel)
+                                    viewModel.inputMsg = ""
+                                    scope.launch {
+                                        scrollState.animateScrollTo(
+                                            contentHeight,
+                                            tween(300)
+                                        )
+                                    }
+                                }else{
+                                    Toast.makeText(context,"请先配置 AI API",
+                                        Toast.LENGTH_SHORT).show()
                                 }
                             }else{
                                 Toast.makeText(context,"请输入你的问题", Toast.LENGTH_SHORT).show()
@@ -371,15 +379,21 @@ fun MainUI(viewModel: ChatViewModel) {
                             "assistant" -> {
                                 Row {
                                     Icon(Icons.Default.Api, "")
-                                    InlineMarkdown(
-                                        content = msg.content,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .padding(end = 16.dp),
-                                        context
-                                    )
+                                    if (viewModel.parseMd) {
+                                        InlineMarkdown(
+                                            content = msg.content,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(end = 16.dp),
+                                            context
+                                        )
+                                    }else{
+                                        Text(msg.content)
+                                    }
                                 }
-                                Row(Modifier.align(Alignment.End).padding(end = 24.dp)) {
+                                Row(Modifier
+                                    .align(Alignment.End)
+                                    .padding(end = 24.dp)) {
                                     if (viewModel.msgs[i].content.isNotEmpty() && !viewModel.isLoading) {
                                         Box(
                                             modifier = Modifier
@@ -426,7 +440,9 @@ fun MainUI(viewModel: ChatViewModel) {
                                             )
                                     );Icon(Icons.Default.AccountCircle, "")
                                 }
-                                Row(Modifier.align(Alignment.End).padding(end = 24.dp)) {
+                                Row(Modifier
+                                    .align(Alignment.End)
+                                    .padding(end = 24.dp)) {
                                     Box(
                                         modifier = Modifier
                                             .size(24.dp)
@@ -632,12 +648,11 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                     onClick = {
                         openRenameDialog = false
                         var newName1=newName.text
+                        viewModel.sessions.remove(editingSession)
                         if (newName1 in viewModel.sessions){
                             newName1=newName1+System.currentTimeMillis().toString()
                         }
                         viewModel.sessions.add(newName1)
-                        viewModel.sessions.remove(editingSession)
-
                         with(sessionsPref.edit()) {
                             putString("sessions", Gson().toJson(viewModel.sessions))
                             apply()
@@ -646,6 +661,9 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                             putString(newName1, history.getString(editingSession, null))
                             remove(editingSession)
                             apply()
+                        }
+                        if (editingSession==viewModel.currentSession){
+                            viewModel.currentSession=newName1
                         }
                     }
                 ) { Text("完成") }
@@ -675,7 +693,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                             remove(editingSession)
                             apply()
                         }
-                        if (viewModel.sessions.isEmpty()) {
+                        if (viewModel.sessions.isEmpty() || editingSession==viewModel.currentSession) {
                             viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
                             viewModel.currentSession = viewModel.sessions.last()
                         }
@@ -797,33 +815,41 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator){
-    val scope=rememberCoroutineScope()
+private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator) {
+    val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     TopAppBar(
         navigationIcon = {
-            IconButton({scope.launch { clickVibrate(vibrator);drawerState.open() }}) {
-                Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list),null)
+            IconButton({ scope.launch { clickVibrate(vibrator);drawerState.open() } }) {
+                Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list), null)
             }
         },
         title = {
             Column {
-                Text(if (viewModel.currentSession.isNotEmpty()){viewModel.currentSession}else{stringResource(R.string.app_name)}, maxLines = 1)
-                Text(text = currentConfig,
+                Text(
+                    if (viewModel.currentSession.isNotEmpty()) {
+                        viewModel.currentSession
+                    } else {
+                        stringResource(R.string.app_name)
+                    }, maxLines = 1
+                )
+                Text(
+                    text = currentConfig,
                     color = Color.Gray,
-                    fontSize = 12.sp, lineHeight = 12.sp)
+                    fontSize = 12.sp, lineHeight = 12.sp
+                )
             }
         },
         actions = {
             IconButton(onClick = { showMenu = !showMenu;clickVibrate(vibrator) }) {
-                Icon(imageVector = Icons.Default.MoreVert,null)
+                Icon(imageVector = Icons.Default.MoreVert, null)
             }
             DropdownMenu(showMenu, onDismissRequest = { showMenu = false }) {
                 DropdownMenuItem(
                     text = { Text("设置") },
                     onClick = {
                         showMenu = false
-                        val intent=Intent(context,SettingsActivity::class.java)
+                        val intent = Intent(context, SettingsActivity::class.java)
                         context.startActivity(intent)
                         (context as ComponentActivity).finish()
                     }
@@ -837,10 +863,24 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
                             Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT)
                                 .show()
                         } else {
-                            createNewSession(viewModel,context)
+                            createNewSession(viewModel, context)
                         }
                     }
                 )
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("解析md")
+                            Checkbox(viewModel.parseMd, onCheckedChange = {
+                                clickVibrate(vibrator)
+                                viewModel.parseMd = !viewModel.parseMd
+                            })
+                        }
+                    },
+                    onClick = {
+                        clickVibrate(vibrator)
+                        viewModel.parseMd = !viewModel.parseMd
+                    })
             }
         }
     )
@@ -934,7 +974,11 @@ class MarkdownParser {
             modifier = modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
-                .clickable { (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setText(AnnotatedString(code)) },
+                .clickable {
+                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setText(
+                        AnnotatedString(code)
+                    )
+                },
             shape = RoundedCornerShape(cornerRadius),
             color = backgroundColor
         ) {
@@ -1082,8 +1126,8 @@ fun InlineMarkdown(content: String, modifier: Modifier = Modifier,context: Conte
         blocks.forEach { block ->
             Row {
                 block()
-                Text("\n", lineHeight = 0.sp)
             }
+            Text("\n", lineHeight = 0.sp)
         }
     }
 }
