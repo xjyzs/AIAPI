@@ -56,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.xjyzs.aiapi.ui.theme.AIAPITheme
+import com.xjyzs.aiapi.utils.clickVibrate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

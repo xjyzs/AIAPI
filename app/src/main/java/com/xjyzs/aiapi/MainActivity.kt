@@ -5,10 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Build
 import android.os.Bundle
-import android.os.VibrationAttributes
-import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -31,7 +28,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -113,6 +109,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.xjyzs.aiapi.ui.theme.AIAPITheme
+import com.xjyzs.aiapi.utils.clickVibrate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -380,7 +377,7 @@ fun MainUI(viewModel: ChatViewModel) {
                             "assistant" -> {
                                 Row {
                                     Icon(Icons.Default.Api, "")
-                                    if (msg.content.isNotEmpty()) {
+                                    if (msg.content.isNotEmpty() || !viewModel.isLoading) {
                                         if (viewModel.parseMd) {
                                             InlineMarkdown(
                                                 content = msg.content,
@@ -902,16 +899,6 @@ private fun createNewSession(viewModel: ChatViewModel,context: Context) {
     }
 }
 
-fun clickVibrate(vibrator: Vibrator){
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val attributes = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)
-        vibrator.vibrate(
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK),
-            attributes
-        )
-    }
-}
-
 class MarkdownParser {
     // 代码块
     private val codeBlockRegex = """```(.*?)\n([\s\S]*?)\s*```""".toRegex()
@@ -1016,36 +1003,50 @@ class MarkdownParser {
         return buildAnnotatedString {
             append(code)
 
-            val green = listOf("\".*?\"","'.*?'")
-            green.forEach { re ->
-                val regex=re.toRegex()
-                regex.findAll(code).forEach { match ->
-                    addStyle(
-                        SpanStyle(color = Color(0xFF067D17)),
-                        match.range.first,
-                        match.range.last + 1
-                    )
+            val lc = language.lowercase()
+            if (lc == "kotlin" || lc == "java") {
+                val rules = listOf(
+                    Rule("""val|var|class""".toRegex(), SpanStyle(color = Color(0xFFFF9800))),
+                )
+                rules.forEach { rule ->
+                    rule.regex.findAll(code).forEach { match ->
+                        addStyle(rule.style, match.range.first, match.range.last + 1)
+                    }
                 }
             }
-
-            when (language.lowercase()) {
-                "kotlin" -> {
-                    val red = listOf("fun", "val", "var", "class", "return")
-                    red.forEach { kw ->
-                        val regex = "\\b$kw\\b".toRegex()
-                        regex.findAll(code).forEach { match ->
-                            addStyle(
-                                SpanStyle(color = Color(0xFFD32F2F)),
-                                match.range.first,
-                                match.range.last + 1
-                            )
-                        }
+            else if (lc == "python") {
+                val rules = listOf(
+                    Rule("""print""".toRegex(), SpanStyle(color = Color(0xFF16659B)))
+                )
+                rules.forEach { rule ->
+                    rule.regex.findAll(code).forEach { match ->
+                        addStyle(rule.style, match.range.first, match.range.last + 1)
                     }
+                }
+            }
+            val rules = listOf(
+                Rule("""\b\d+(\.\d+)?\b""".toRegex(), SpanStyle(color = Color(0xFF16659B))), // 数字
+                Rule(
+                    """return |def |fun |try|except |except:|finally|with | as |if |else |import """.toRegex(),
+                    SpanStyle(color = Color(0xFFFF9800))
+                ),
+                Rule("""@.*?\n""".toRegex(), SpanStyle(color = Color(0xFFFFEB3B))),
+                Rule("""".*?"|'.*?'""".toRegex(), SpanStyle(color = Color(0xFF067D17))), // 字符串
+                Rule("""//.*|#.*""".toRegex(), SpanStyle(color = Color(0xFF9E9E9E))), // 注释
+                Rule("""/\*.*?\*/""".toRegex(RegexOption.DOT_MATCHES_ALL),SpanStyle(color = Color(0xFF9E9E9E))), // 注释
+            )
+            rules.forEach { rule ->
+                rule.regex.findAll(code).forEach { match ->
+                    addStyle(rule.style, match.range.first, match.range.last + 1)
                 }
             }
         }
     }
 
+    private data class Rule(
+        val regex: Regex,
+        val style: SpanStyle
+    )
 
     private fun parseHeader(line: String): (@Composable () -> Unit)? {
         val (hashes, text) = headerRegex.find(line)?.destructured ?: return null
