@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -379,16 +380,20 @@ fun MainUI(viewModel: ChatViewModel) {
                             "assistant" -> {
                                 Row {
                                     Icon(Icons.Default.Api, "")
-                                    if (viewModel.parseMd) {
-                                        InlineMarkdown(
-                                            content = msg.content,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(end = 16.dp),
-                                            context
-                                        )
+                                    if (msg.content.isNotEmpty()) {
+                                        if (viewModel.parseMd) {
+                                            InlineMarkdown(
+                                                content = msg.content,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(end = 16.dp),
+                                                context
+                                            )
+                                        } else {
+                                            Text(msg.content)
+                                        }
                                     }else{
-                                        Text(msg.content)
+                                        CircularProgressIndicator(Modifier.size(24.dp))
                                     }
                                 }
                                 Row(Modifier

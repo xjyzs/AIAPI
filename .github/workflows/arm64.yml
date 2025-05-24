@@ -38,11 +38,18 @@ jobs:
           echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
           ./gradlew assembleArm64Release
 
+      - name: Extract version from build.gradle.kts
+        id: version
+        run: |
+          VERSION=$(grep -oP 'versionName\s*=\s*\"\K[^"]+' app/build.gradle.kts | head -1)
+          echo "Extracted version: $VERSION"
+          echo "::set-output name=version::$VERSION"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v1.0
+          tag_name: v${{ steps.version.outputs.version }}
           files: |
             app/build/outputs/apk/*/release/*.apk
