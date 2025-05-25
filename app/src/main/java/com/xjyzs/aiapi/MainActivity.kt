@@ -358,7 +358,8 @@ fun MainUI(viewModel: ChatViewModel) {
                     }
                 },
                 sendImg = if (sendImg==1){Icons.Default.ArrowUpward}
-                else{ImageVector.vectorResource(R.drawable.ic_rectangle)}, vibrator
+                else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
+                vibrator,LocalSoftwareKeyboardController.current
             )
         }
     ) { innerPadding ->
@@ -491,7 +492,8 @@ fun MessageInputBar(
     onMsgChange: (String) -> Unit,
     onSend: (String) -> Unit,
     sendImg: ImageVector,
-    vibrator: Vibrator
+    vibrator: Vibrator,
+    keyboardController: SoftwareKeyboardController
 ) {
     Surface(
         modifier = Modifier
@@ -507,7 +509,8 @@ fun MessageInputBar(
                 value = msg,
                 onValueChange = onMsgChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("输入消息...") }
+                placeholder = { Text("输入消息...") },
+                maxLines = 7
             )
             Spacer(Modifier.size(6.dp))
             Box(
@@ -517,13 +520,14 @@ fun MessageInputBar(
                     .background(MaterialTheme.colorScheme.primary)
                     .clickable {
                         clickVibrate(vibrator)
+                        keyboardController.hide()
                         onSend(msg)
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = sendImg,
-                    contentDescription = "",
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(24.dp))
             }
