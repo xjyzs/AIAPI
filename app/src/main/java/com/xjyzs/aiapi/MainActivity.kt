@@ -321,26 +321,27 @@ fun MainUI(viewModel: ChatViewModel) {
                     }else {
                         try {
                             if (it.isNotEmpty()) {
-                                if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
-                                    val withoutEnter=it.replace("\n","")
-                                    var newName=if (withoutEnter.length>20){withoutEnter.substring(0,20)}else{withoutEnter}
-                                    if (newName in viewModel.sessions){
-                                        newName=newName+System.currentTimeMillis().toString()
-                                    }
-                                    viewModel.sessions.add(newName)
-                                    viewModel.sessions.remove(viewModel.currentSession)
-                                    with (sessionsPref.edit()){
-                                        putString("sessions",Gson().toJson(viewModel.sessions))
-                                        apply()
-                                    }
-                                    with(history.edit()) {
-                                        putString(newName, Gson().toJson(viewModel.toList()).toString())
-                                        remove(viewModel.currentSession)
-                                        apply()
-                                    }
-                                    viewModel.currentSession=newName
-                                }
                                 if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
+                                    if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
+                                        val withoutEnter=it.replace("\n","")
+                                        var newName=if (withoutEnter.length>20){withoutEnter.substring(0,20)}else{withoutEnter}
+                                        if (newName in viewModel.sessions){
+                                            newName=newName+System.currentTimeMillis().toString()
+                                        }
+                                        viewModel.sessions.add(newName)
+                                        viewModel.sessions.remove(viewModel.currentSession)
+                                        with (sessionsPref.edit()){
+                                            putString("sessions",Gson().toJson(viewModel.sessions))
+                                            apply()
+                                        }
+                                        with(history.edit()) {
+                                            putString(newName, Gson().toJson(viewModel.toList()).toString())
+                                            remove(viewModel.currentSession)
+                                            apply()
+                                        }
+                                        viewModel.currentSession=newName
+                                    }
+                                    LocalSoftwareKeyboardController.current!!.hide()
                                     viewModel.addUserMessage(it)
                                     send(context, viewModel)
                                     viewModel.inputMsg = ""
@@ -364,7 +365,7 @@ fun MainUI(viewModel: ChatViewModel) {
                 },
                 sendImg = if (sendImg==1){Icons.Default.ArrowUpward}
                 else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
-                vibrator,LocalSoftwareKeyboardController.current!!
+                vibrator
             )
         }
     ) { innerPadding ->
@@ -497,8 +498,7 @@ fun MessageInputBar(
     onMsgChange: (String) -> Unit,
     onSend: (String) -> Unit,
     sendImg: ImageVector,
-    vibrator: Vibrator,
-    keyboardController: SoftwareKeyboardController
+    vibrator: Vibrator
 ) {
     Surface(
         modifier = Modifier
@@ -525,7 +525,6 @@ fun MessageInputBar(
                     .background(MaterialTheme.colorScheme.primary)
                     .clickable {
                         clickVibrate(vibrator)
-                        keyboardController.hide()
                         onSend(msg)
                     },
                 contentAlignment = Alignment.Center
