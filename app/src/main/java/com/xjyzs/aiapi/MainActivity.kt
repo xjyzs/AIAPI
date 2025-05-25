@@ -364,7 +364,7 @@ fun MainUI(viewModel: ChatViewModel) {
                 },
                 sendImg = if (sendImg==1){Icons.Default.ArrowUpward}
                 else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
-                vibrator,LocalSoftwareKeyboardController.current
+                vibrator,LocalSoftwareKeyboardController.current!!
             )
         }
     ) { innerPadding ->
