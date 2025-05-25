@@ -1,7 +1,6 @@
 package com.xjyzs.aiapi
 
 import android.annotation.SuppressLint
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -33,7 +32,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -86,17 +84,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -109,7 +100,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.xjyzs.aiapi.ui.theme.AIAPITheme
+import com.xjyzs.aiapi.utils.InlineMarkdown
 import com.xjyzs.aiapi.utils.clickVibrate
+import com.xjyzs.aiapi.utils.hideKeyboard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -121,11 +114,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.SoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
 
 @Keep
 data class Message(val role: String, val content: String)
@@ -278,7 +266,7 @@ fun MainUI(viewModel: ChatViewModel) {
             viewModel.addSystemMessage(systemPrompt)
         }
         delay(100)
-        scrollState.animateScrollTo(contentHeight,tween(500))
+        scrollState.animateScrollTo(contentHeight,tween(300))
     }
     LaunchedEffect(if (viewModel.msgs.isNotEmpty())viewModel.msgs.last().content.length else 0) {
         if (contentHeight - scrollState.value - containerHeight < 10) {
@@ -341,7 +329,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                         }
                                         viewModel.currentSession=newName
                                     }
-                                    LocalSoftwareKeyboardController.current!!.hide()
+                                    context.hideKeyboard()
                                     viewModel.addUserMessage(it)
                                     send(context, viewModel)
                                     viewModel.inputMsg = ""
@@ -723,7 +711,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         scope.launch {
                             scrollState.scrollTo(0)
                             delay(100)
-                            scrollState.animateScrollTo(contentHeight, tween(500))
+                            scrollState.animateScrollTo(contentHeight, tween(300))
                         }
                     }
                 ) { Text("删除") }
@@ -793,7 +781,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         scope.launch {
                             scrollState.scrollTo(0)
                             delay(100)
-                            scrollState.animateScrollTo(contentHeight, tween(500))
+                            scrollState.animateScrollTo(contentHeight, tween(300))
                         }
                     }
                 },
@@ -904,244 +892,5 @@ private fun createNewSession(viewModel: ChatViewModel,context: Context) {
         viewModel.addSystemMessage(systemPrompt)
         viewModel.currentSession = "新对话" + System.currentTimeMillis().toString()
         viewModel.sessions.add(viewModel.currentSession)
-    }
-}
-
-class MarkdownParser {
-    // 代码块
-    private val codeBlockRegex = """```(.*?)\n([\s\S]*?)\s*```""".toRegex()
-    // 块级元素正则表达式
-    private val headerRegex = """^(#{1,6})\s*(.*)""".toRegex()
-    private val unorderedListRegex = """^[*+-]\s+(.*)""".toRegex()
-    private val orderedListRegex = """^(\d+)\.\s+(.*)""".toRegex()
-
-    // 行内样式正则表达式
-    private val boldRegex = """\*\*(.*?)\*\*""".toRegex()
-    private val italicRegex = """\*(.*?)\*""".toRegex()
-    private val codeRegex = """`(.*?)`""".toRegex()
-    private val deleteRegex = """~~(.*?)~~""".toRegex()
-
-    fun parse(content: String,context: Context): List<@Composable () -> Unit> {
-        val blocks = mutableListOf<@Composable () -> Unit>()
-
-        var remainingText = content
-
-        while (true) {
-            val codeBlockMatch = codeBlockRegex.find(remainingText)
-
-            val precedingText = if (codeBlockMatch != null) {
-                remainingText.substring(0, codeBlockMatch.range.first)
-            } else {
-                remainingText
-            }
-            parseRegularText(precedingText, blocks)
-            if (codeBlockMatch == null) break
-            val (language, code) = codeBlockMatch.destructured
-            blocks.add { CodeBlock(code, language,context=context) }
-
-            remainingText = remainingText.substring(codeBlockMatch.range.last + 1)
-        }
-
-        return blocks
-    }
-
-    private fun parseRegularText(text: String, blocks: MutableList<@Composable () -> Unit>) {
-        text.split("\n").forEach { line ->
-            when {
-                line.matches(headerRegex) -> parseHeader(line)?.let { blocks.add(it) }
-                line.matches(unorderedListRegex) -> parseListItem(line)?.let { blocks.add(it) }
-                line.matches(orderedListRegex) -> parseOrderedListItem(line)?.let {
-                    blocks.add(it)
-                }
-
-                else -> blocks.add { ParseInlineText(line) }
-            }
-        }
-    }
-
-    @Composable
-    fun CodeBlock(
-        code: String,
-        language: String = "",
-        modifier: Modifier = Modifier,
-        backgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        cornerRadius: Dp = 8.dp,
-        context: Context
-    ) {
-        val typography = MaterialTheme.typography
-
-        Surface(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .clickable {
-                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setText(
-                        AnnotatedString(code)
-                    )
-                },
-            shape = RoundedCornerShape(cornerRadius),
-            color = backgroundColor
-        ) {
-            Column {
-                if (language.isNotBlank()) {
-                    Text(
-                        text = language,
-                        style = typography.labelSmall,
-                        modifier = Modifier
-                            .padding(start = 12.dp, top = 8.dp, end = 12.dp)
-                            .align(Alignment.Start),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    text = highlightSyntax(code, language),
-                    style = typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        lineHeight = 20.sp
-                    ),
-                    modifier = Modifier
-                        .padding(12.dp),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
-
-    fun highlightSyntax(code: String, language: String): AnnotatedString {
-        return buildAnnotatedString {
-            append(code)
-
-            val lc = language.lowercase()
-            if (lc == "kotlin" || lc == "java") {
-                val rules = listOf(
-                    Rule("""val|var|class""".toRegex(), SpanStyle(color = Color(0xFFFF9800))),
-                )
-                rules.forEach { rule ->
-                    rule.regex.findAll(code).forEach { match ->
-                        addStyle(rule.style, match.range.first, match.range.last + 1)
-                    }
-                }
-            }
-            else if (lc == "python") {
-                val rules = listOf(
-                    Rule("""print""".toRegex(), SpanStyle(color = Color(0xFF16659B)))
-                )
-                rules.forEach { rule ->
-                    rule.regex.findAll(code).forEach { match ->
-                        addStyle(rule.style, match.range.first, match.range.last + 1)
-                    }
-                }
-            }
-            val rules = listOf(
-                Rule("""\b\d+(\.\d+)?\b""".toRegex(), SpanStyle(color = Color(0xFF16659B))), // 数字
-                Rule(
-                    """return |def |fun |try|except |except:|finally|with | as |if |else |import """.toRegex(),
-                    SpanStyle(color = Color(0xFFFF9800))
-                ),
-                Rule("""@.*?\n""".toRegex(), SpanStyle(color = Color(0xFFFFEB3B))),
-                Rule("""".*?"|'.*?'""".toRegex(), SpanStyle(color = Color(0xFF067D17))), // 字符串
-                Rule("""//.*|#.*""".toRegex(), SpanStyle(color = Color(0xFF9E9E9E))), // 注释
-                Rule("""/\*.*?\*/""".toRegex(RegexOption.DOT_MATCHES_ALL),SpanStyle(color = Color(0xFF9E9E9E))), // 注释
-            )
-            rules.forEach { rule ->
-                rule.regex.findAll(code).forEach { match ->
-                    addStyle(rule.style, match.range.first, match.range.last + 1)
-                }
-            }
-        }
-    }
-
-    private data class Rule(
-        val regex: Regex,
-        val style: SpanStyle
-    )
-
-    private fun parseHeader(line: String): (@Composable () -> Unit)? {
-        val (hashes, text) = headerRegex.find(line)?.destructured ?: return null
-        val level = hashes.length.coerceIn(1, 6)
-        return {
-            Text(
-                text = parseInlineStyles(text),
-                fontSize = when (level) {
-                    1 -> 24.sp
-                    else -> (24-level * 1).sp
-                },
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-
-    private fun parseListItem(line: String): (@Composable () -> Unit)? {
-        val (content) = unorderedListRegex.find(line)?.destructured ?: return null
-        return {
-            Row(verticalAlignment = Alignment.Top) {
-                Text("• ", fontSize = 16.sp)
-                Text(parseInlineStyles(content))
-            }
-        }
-    }
-
-    private fun parseOrderedListItem(line: String): (@Composable () -> Unit)? {
-        val (num, content) = orderedListRegex.find(line)?.destructured ?: return null
-        return {
-            Row(verticalAlignment = Alignment.Top) {
-                Text("$num. ", fontSize = 16.sp)
-                Text(parseInlineStyles(content))
-            }
-        }
-    }
-
-    @Composable
-    private fun ParseInlineText(text: String) {
-        Text(parseInlineStyles(text))
-    }
-
-    @Composable
-    private fun parseInlineStyles(text: String): AnnotatedString {
-        val annotatedString = buildAnnotatedString {
-            append(text)
-
-            // 处理粗体
-            boldRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(fontWeight = FontWeight.Bold), result.range.first+1,result.range.last)
-            }
-
-            // 处理斜体
-            italicRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(fontStyle = FontStyle.Italic), result.range.first+1,result.range.last)
-            }
-
-            // 处理删除线
-            deleteRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), result.range.first+1,result.range.last)
-            }
-
-            // 处理代码样式
-            codeRegex.findAll(text).forEach { result ->
-                addStyle(
-                    SpanStyle(
-                        background = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        fontFamily = FontFamily.Monospace
-                    ),
-                    result.range.first+1,result.range.last
-                )
-            }
-        }
-        return annotatedString
-    }
-}
-
-@Composable
-fun InlineMarkdown(content: String, modifier: Modifier = Modifier,context: Context) {
-    val parser = remember { MarkdownParser() }
-    val blocks = remember(content) { parser.parse(content, context) }
-
-    Column(modifier) {
-        blocks.forEach { block ->
-            Row {
-                block()
-            }
-            Text("\n", lineHeight = 0.sp)
-        }
     }
 }
