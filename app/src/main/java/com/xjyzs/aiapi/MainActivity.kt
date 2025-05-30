@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,13 +17,17 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -32,6 +38,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -53,15 +61,16 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -79,6 +88,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -114,6 +124,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
+import kotlin.math.round
 
 @Keep
 data class Message(val role: String, val content: String)
@@ -126,6 +137,7 @@ class ChatViewModel : ViewModel() {
     var cancel=false
     var currentSession by mutableStateOf("")
     var parseMd by mutableStateOf(true)
+    var temperature by mutableIntStateOf(-1)
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -353,7 +365,7 @@ fun MainUI(viewModel: ChatViewModel) {
                 },
                 sendImg = if (sendImg==1){Icons.Default.ArrowUpward}
                 else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
-                vibrator
+                viewModel,vibrator
             )
         }
     ) { innerPadding ->
@@ -480,49 +492,102 @@ fun MainUI(viewModel: ChatViewModel) {
 })
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInputBar(
     msg: String,
     onMsgChange: (String) -> Unit,
     onSend: (String) -> Unit,
     sendImg: ImageVector,
+    viewModel: ChatViewModel,
     vibrator: Vibrator
 ) {
+    var expanded by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .imePadding(), shadowElevation = 8.dp
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = msg,
-                onValueChange = onMsgChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("输入消息...") },
-                maxLines = 7
-            )
-            Spacer(Modifier.size(6.dp))
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .clickable {
-                        clickVibrate(vibrator)
-                        onSend(msg)
-                    },
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = sendImg,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(24.dp))
+                BasicTextField(
+                    value = msg,
+                    onValueChange = onMsgChange,
+                    modifier = Modifier
+                        .weight(1f).heightIn(min = 36.dp),
+                    textStyle = LocalTextStyle.current.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    maxLines = 7,
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                                .padding(vertical = 5.dp, horizontal = 8.dp)
+                        ) {
+                            if (msg.isEmpty()) {
+                                Text(
+                                    text = "输入消息...",
+                                    style = LocalTextStyle.current.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+                Spacer(Modifier.size(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable {
+                            clickVibrate(vibrator)
+                            onSend(msg)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = sendImg,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
+            TextButton ({ expanded = true }, Modifier.height(28.dp), contentPadding = PaddingValues(5.dp),shape = RectangleShape) {
+                Text(
+                    "温度:${
+                        if (viewModel.temperature >= 0) {
+                            viewModel.temperature.toFloat() / 10
+                        } else {
+                            "未设置"
+                        }
+                    }"
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            Modifier.width(200.dp)
+        ) {
+            Slider(value = viewModel.temperature.toFloat(), onValueChange = {
+                val tmp=round(it).toInt()
+                if (tmp!=viewModel.temperature) {
+                    viewModel.temperature = tmp
+                    clickVibrate(vibrator)
+                }
+            }, valueRange = -1f..20f, steps = 20)
         }
     }
 }
@@ -539,13 +604,17 @@ private fun send(
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
 
-    val requestBody = Gson().toJson(
-        mapOf(
-            "model" to model,
-            "messages" to viewModel.withoutReasoning(),
-            "stream" to true
-        )
+    var bodyMap=mutableMapOf(
+        "model" to model,
+        "messages" to viewModel.withoutReasoning(),
+        "stream" to true
     )
+    bodyMap.apply {
+        if (viewModel.temperature >= 0) {
+            put("temperature", viewModel.temperature.toFloat() / 10)
+        }
+    }
+    val requestBody = Gson().toJson(bodyMap)
         .toRequestBody("application/json".toMediaTypeOrNull())
 
     val request = Request.Builder()
