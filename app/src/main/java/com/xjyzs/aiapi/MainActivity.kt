@@ -4,10 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
-import android.os.VibratorManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -138,6 +136,7 @@ class ChatViewModel : ViewModel() {
     var currentSession by mutableStateOf("")
     var parseMd by mutableStateOf(true)
     var temperature by mutableIntStateOf(-1)
+    var maxTokens by mutableStateOf("")
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -191,6 +190,14 @@ class ChatViewModel : ViewModel() {
     fun fromList(lst: MutableList<Message>){
         msgs.clear()
         msgs.addAll(lst)
+    }
+    fun maxTokensIsNumber(): Boolean{
+        try {
+            maxTokens.toInt()
+            return true
+        }catch (_: Exception){
+            return false
+        }
     }
 }
 
@@ -502,7 +509,8 @@ fun MessageInputBar(
     viewModel: ChatViewModel,
     vibrator: Vibrator
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var temperatureExpanded by remember { mutableStateOf(false) }
+    var maxTokensExpanded by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -564,21 +572,52 @@ fun MessageInputBar(
                     )
                 }
             }
-            TextButton ({ expanded = true }, Modifier.height(28.dp), contentPadding = PaddingValues(5.dp),shape = RectangleShape) {
-                Text(
-                    "温度:${
-                        if (viewModel.temperature >= 0) {
-                            viewModel.temperature.toFloat() / 10
-                        } else {
-                            "未设置"
-                        }
-                    }"
-                )
+            Row {
+                TextButton(
+                    { temperatureExpanded = true },
+                    Modifier.height(28.dp),
+                    contentPadding = PaddingValues(5.dp),
+                    shape = RectangleShape
+                ) {
+                    Text(
+                        "温度:${
+                            if (viewModel.temperature >= 0) {
+                                viewModel.temperature.toFloat() / 10
+                            } else {
+                                "未设置"
+                            }
+                        }"
+                    )
+                }
+                TextButton(
+                    { maxTokensExpanded = !maxTokensExpanded },
+                    Modifier.height(28.dp),
+                    contentPadding = PaddingValues(5.dp),
+                    shape = RectangleShape
+                ) {
+                    Text(
+                        "最大 token 数:${
+                            if (viewModel.maxTokensIsNumber()) {
+                                viewModel.maxTokens
+                            } else {
+                                "未设置"
+                            }
+                        }"
+                    )
+                }
+            }
+            if (maxTokensExpanded){
+                OutlinedTextField(value = viewModel.maxTokens.toString(), onValueChange = {
+                    try {
+                        viewModel.maxTokens = it
+                    } catch (_: Exception) {
+                    }
+                })
             }
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
+        DropdownMenu( // 温度
+            expanded = temperatureExpanded,
+            onDismissRequest = { temperatureExpanded = false },
             Modifier.width(200.dp)
         ) {
             Slider(value = viewModel.temperature.toFloat(), onValueChange = {
@@ -613,6 +652,9 @@ private fun send(
         if (viewModel.temperature >= 0) {
             put("temperature", viewModel.temperature.toFloat() / 10)
         }
+        if (viewModel.maxTokensIsNumber()){
+            put("max_tokens",viewModel.maxTokens.toInt())
+        }
     }
     val requestBody = Gson().toJson(bodyMap)
         .toRequestBody("application/json".toMediaTypeOrNull())
@@ -642,15 +684,26 @@ private fun send(
                         try {
                             val cleanLine = line?.removePrefix("data: ")?.trim()
                             val json = JsonParser.parseString(cleanLine).asJsonObject
-                            val delta = json.getAsJsonArray("choices")
+                            val choices = json.getAsJsonArray("choices")
                                 ?.firstOrNull()
                                 ?.asJsonObject
-                                ?.getAsJsonObject("delta")
+                            val delta = choices?.getAsJsonObject("delta")
                             if (viewModel.cancel)break
                             if (delta?.get("content")?.isJsonNull == false) {
                                 viewModel.updateAIMessage(delta.get("content")?.asString!!)
                             } else {
                                 viewModel.updateAIReasoningMessage(delta?.get("reasoning_content")?.asString!!)
+                            }
+                            if (!choices.get("finish_reason").isJsonNull) {
+                                if (choices.get("finish_reason").asString != "stop") {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(
+                                            context,
+                                            choices.get("finish_reason").asString,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
                             }
                         } catch (_: Exception) {
                         }
