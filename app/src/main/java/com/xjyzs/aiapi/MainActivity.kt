@@ -87,6 +87,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -529,6 +530,7 @@ fun MessageInputBar(
                     textStyle = LocalTextStyle.current.copy(
                         color = MaterialTheme.colorScheme.onSurface
                     ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     maxLines = 7,
                     decorationBox = { innerTextField ->
                         Box(
@@ -538,7 +540,7 @@ fun MessageInputBar(
                                     color = MaterialTheme.colorScheme.outline,
                                     shape = RoundedCornerShape(18.dp)
                                 )
-                                .padding(vertical = 5.dp, horizontal = 8.dp)
+                                .padding(vertical = 5.dp, horizontal = 10.dp)
                         ) {
                             if (msg.isEmpty()) {
                                 Text(
