@@ -269,7 +269,7 @@ fun MainUI(viewModel: ChatViewModel) {
             )
         ).asJsonObject
         api_url=settings.get("apiUrl").asString;api_key=settings.get("apiKey").asString;model=settings.get("model").asString;systemPrompt=settings.get("systemPrompt").asString
-        api_url = if (api_url.endsWith("/")) {api_url+"chat/completions"} else {"$api_url/chat/completions"}
+        //api_url = if (api_url.endsWith("/")) {api_url+"chat/completions"} else {"$api_url/chat/completions"}
         if (viewModel.sessions.isEmpty()) {
             viewModel.sessions.add("新对话"+System.currentTimeMillis().toString())
         }
