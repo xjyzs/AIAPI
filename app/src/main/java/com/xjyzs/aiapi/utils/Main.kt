@@ -51,18 +51,19 @@ fun Context.hideKeyboard() {
 class MarkdownParser {
     // 代码块
     private val codeBlockRegex = """```(.*?)\n([\s\S]*?)\s*```""".toRegex()
-    // 块级元素正则表达式
+
+    // 块级元素
     private val headerRegex = """^(#{1,6})\s*(.*)""".toRegex()
     private val unorderedListRegex = """^[*+-]\s+(.*)""".toRegex()
     private val orderedListRegex = """^(\d+)\.\s+(.*)""".toRegex()
 
-    // 行内样式正则表达式
+    // 行内样式
     private val boldRegex = """\*\*(.*?)\*\*""".toRegex()
     private val italicRegex = """\*(.*?)\*""".toRegex()
     private val codeRegex = """`(.*?)`""".toRegex()
     private val deleteRegex = """~~(.*?)~~""".toRegex()
 
-    fun parse(content: String,context: Context): List<@Composable () -> Unit> {
+    fun parse(content: String, context: Context): List<@Composable () -> Unit> {
         val blocks = mutableListOf<@Composable () -> Unit>()
 
         var remainingText = content
@@ -78,7 +79,7 @@ class MarkdownParser {
             parseRegularText(precedingText, blocks)
             if (codeBlockMatch == null) break
             val (language, code) = codeBlockMatch.destructured
-            blocks.add { CodeBlock(code, language,context=context) }
+            blocks.add { CodeBlock(code, language, context = context) }
 
             remainingText = remainingText.substring(codeBlockMatch.range.last + 1)
         }
@@ -162,8 +163,7 @@ class MarkdownParser {
                         addStyle(rule.style, match.range.first, match.range.last + 1)
                     }
                 }
-            }
-            else if (lc == "python") {
+            } else if (lc == "python") {
                 val rules = listOf(
                     Rule("""print""".toRegex(), SpanStyle(color = Color(0xFF16659B)))
                 )
@@ -182,7 +182,10 @@ class MarkdownParser {
                 Rule("""@.*?\n""".toRegex(), SpanStyle(color = Color(0xFFD5C430))),
                 Rule("""".*?"|'.*?'""".toRegex(), SpanStyle(color = Color(0xFF067D17))), // 字符串
                 Rule("""(?<![:/])(//|#).*""".toRegex(), SpanStyle(color = Color(0xFF9E9E9E))), // 注释
-                Rule("""/\*.*?\*/""".toRegex(RegexOption.DOT_MATCHES_ALL),SpanStyle(color = Color(0xFF9E9E9E))), // 注释
+                Rule(
+                    """/\*.*?\*/""".toRegex(RegexOption.DOT_MATCHES_ALL),
+                    SpanStyle(color = Color(0xFF9E9E9E))
+                ), // 注释
             )
             rules.forEach { rule ->
                 rule.regex.findAll(code).forEach { match ->
@@ -205,7 +208,7 @@ class MarkdownParser {
                 text = parseInlineStyles(text),
                 fontSize = when (level) {
                     1 -> 24.sp
-                    else -> (24-level * 1).sp
+                    else -> (24 - level * 1).sp
                 },
                 fontWeight = FontWeight.Bold
             )
@@ -244,17 +247,29 @@ class MarkdownParser {
 
             // 处理粗体
             boldRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(fontWeight = FontWeight.Bold), result.range.first+1,result.range.last)
+                addStyle(
+                    SpanStyle(fontWeight = FontWeight.ExtraBold),
+                    result.range.first + 2,
+                    result.range.last - 1
+                )
             }
 
             // 处理斜体
             italicRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(fontStyle = FontStyle.Italic), result.range.first+1,result.range.last)
+                addStyle(
+                    SpanStyle(fontStyle = FontStyle.Italic),
+                    result.range.first + 1,
+                    result.range.last
+                )
             }
 
             // 处理删除线
             deleteRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), result.range.first+1,result.range.last)
+                addStyle(
+                    SpanStyle(textDecoration = TextDecoration.LineThrough),
+                    result.range.first + 2,
+                    result.range.last - 1
+                )
             }
 
             // 处理代码样式
@@ -264,7 +279,8 @@ class MarkdownParser {
                         background = MaterialTheme.colorScheme.surfaceContainerHighest,
                         fontFamily = FontFamily.Monospace
                     ),
-                    result.range.first+1,result.range.last
+                    result.range.first + 1,
+                    result.range.last
                 )
             }
         }

@@ -1,6 +1,5 @@
 package com.xjyzs.aiapi
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -50,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -75,17 +75,19 @@ class SettingsActivity : ComponentActivity() {
             navigateToMainAndFinish()
         }
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             AIAPITheme {
-                val viewModel:SettingsViewModel= viewModel()
+                val viewModel: SettingsViewModel = viewModel()
                 SettingsUI(viewModel)
             }
         }
         onBackPressedDispatcher.addCallback(this, backCallback)
     }
+
     private fun navigateToMainAndFinish() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -95,17 +97,17 @@ class SettingsActivity : ComponentActivity() {
     }
 }
 
-@SuppressLint("MutableCollectionMutableState", "CommitPrefEdits")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsUI(viewModel: SettingsViewModel) {
     val context = LocalContext.current
     val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
-    var scrollState = rememberScrollState()
+    val scrollState = rememberScrollState()
     var modelsExpanded by remember { mutableStateOf(false) }
     var configsExpanded by remember { mutableStateOf(false) }
-    var configsList by remember { mutableStateOf(mutableListOf<String>()) }
+    val configsList = mutableListOf<String>()
     var apiUrl by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var model by remember { mutableStateOf("") }
@@ -117,9 +119,12 @@ fun SettingsUI(viewModel: SettingsViewModel) {
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     fun getModels() {
         isLoading = true
-        var url = ""
-        url = if (apiUrl.endsWith("/")) {
-            apiUrl + "models"
+        val url = if (apiUrl.endsWith("chat/completions")) {
+            apiUrl.substring(0, apiUrl.length - 16) + "models"
+        } else if (apiUrl.endsWith("chat/completions/")) {
+            apiUrl.substring(0, apiUrl.length - 17) + "models"
+        } else if (apiUrl.endsWith("/")) {
+            "${apiUrl}models"
         } else {
             "$apiUrl/models"
         }
@@ -167,9 +172,8 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                 title = { Text("设置") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        with(currentConfigPref.edit()) {
+                        currentConfigPref.edit {
                             putString("currentConfig", currentConfig)
-                            apply()
                         }
                         val intent = Intent(context, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
@@ -207,7 +211,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                                 Text(i)
                                 Spacer(Modifier.weight(1f))
                                 IconButton({
-                                    configsExpanded=false
+                                    configsExpanded = false
                                     clickVibrate(vibrator)
                                     deletingConfig = i
                                     openDelDialog = true
@@ -236,16 +240,17 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }, onClick = {
                     currentConfig = ""
-                    apiUrl=""
-                    apiKey=""
-                    model=""
-                    systemPrompt=""
+                    apiUrl = ""
+                    apiKey = ""
+                    model = ""
+                    systemPrompt = ""
                 })
             }
             TextField(
                 label = { Text("API URL") },
                 value = apiUrl,
                 onValueChange = { apiUrl = it },
+                placeholder = { Text(".../chat/completions") },
                 modifier = Modifier.fillMaxWidth()
             )
             TextField(
@@ -281,7 +286,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                 onDismissRequest = { modelsExpanded = false }
             ) {
                 for (i in viewModel.models) {
-                    if (model.toString().lowercase() in i.lowercase()) {
+                    if (model.lowercase() in i.lowercase()) {
                         DropdownMenuItem(
                             text = { Text(i) },
                             onClick = {
@@ -300,7 +305,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
             )
             Button({
                 if (currentConfig.isNotEmpty()) {
-                    with(settingsPref.edit()) {
+                    settingsPref.edit {
                         putString(
                             currentConfig,
                             Gson().toJson(
@@ -312,11 +317,9 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                                 )
                             )
                         )
-                        apply()
                     }
-                    with(currentConfigPref.edit()) {
+                    currentConfigPref.edit {
                         putString("currentConfig", currentConfig)
-                        apply()
                     }
                     val intent = Intent(context, MainActivity::class.java)
                     context.startActivity(intent)
@@ -337,13 +340,12 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                 TextButton(
                     onClick = {
                         openDelDialog = false
-                        with(settingsPref.edit()) {
+                        settingsPref.edit {
                             remove(deletingConfig)
-                            apply()
                         }
                         configsList.remove(deletingConfig)
-                        if (currentConfig==deletingConfig){
-                            currentConfig=""
+                        if (currentConfig == deletingConfig) {
+                            currentConfig = ""
                         }
                     }
                 ) { Text("删除") }

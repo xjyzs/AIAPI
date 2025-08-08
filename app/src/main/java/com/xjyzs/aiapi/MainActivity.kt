@@ -12,7 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.Keep
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -99,9 +98,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -130,10 +127,10 @@ data class Message(val role: String, val content: String)
 @SuppressLint("MutableCollectionMutableState")
 class ChatViewModel : ViewModel() {
     var msgs = mutableStateListOf<Message>()
-    var sessions=mutableStateListOf<String>()
+    var sessions = mutableStateListOf<String>()
     var isLoading by mutableStateOf(false)
     var inputMsg by mutableStateOf("")
-    var cancel=false
+    var cancel = false
     var currentSession by mutableStateOf("")
     var parseMd by mutableStateOf(true)
     var temperature by mutableIntStateOf(-1)
@@ -167,8 +164,8 @@ class ChatViewModel : ViewModel() {
 
     fun updateAIReasoningMessage(content: String) {
         viewModelScope.launch(Dispatchers.Main) {
-            if (msgs.last().role == "assistant" && msgs.last().content == ""){
-                msgs.removeAt(msgs.size-1)
+            if (msgs.last().role == "assistant" && msgs.last().content == "") {
+                msgs.removeAt(msgs.size - 1)
             }
             if (msgs.isEmpty() || msgs.last().role != "assistant_reasoning") {
                 msgs.add(Message("assistant_reasoning", content))
@@ -184,19 +181,22 @@ class ChatViewModel : ViewModel() {
             .filter { it.role != "assistant_reasoning" }
             .map { it.copy() }
     }
-    fun toList(): List<Message>{
+
+    fun toList(): List<Message> {
         return msgs
             .map { it.copy() }
     }
-    fun fromList(lst: MutableList<Message>){
+
+    fun fromList(lst: MutableList<Message>) {
         msgs.clear()
         msgs.addAll(lst)
     }
-    fun maxTokensIsNumber(): Boolean{
+
+    fun maxTokensIsNumber(): Boolean {
         try {
             maxTokens.toInt()
             return true
-        }catch (_: Exception){
+        } catch (_: Exception) {
             return false
         }
     }
@@ -220,45 +220,37 @@ var model=""
 var systemPrompt=""
 var containerHeight=0
 var contentHeight=0
-@SuppressLint("CommitPrefEdits")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainUI(viewModel: ChatViewModel) {
     val context = LocalContext.current
-    val history=context.getSharedPreferences("history", Context.MODE_PRIVATE)
+    val history = context.getSharedPreferences("history", Context.MODE_PRIVATE)
     val scrollState = rememberScrollState()
     var sendImg by remember { mutableIntStateOf(1) }
-    var drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val sessionsPref = context.getSharedPreferences("sessions", Context.MODE_PRIVATE)
     val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
-    var currentConfig=currentConfigPref.getString("currentConfig","")
+    var currentConfig = currentConfigPref.getString("currentConfig", "")
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-    val scope=rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
-    //保存重要数据
-    val lifecycle = ProcessLifecycleOwner.get().lifecycle
-    val observer = LifecycleEventObserver { _, event ->
-        if (event == Lifecycle.Event.ON_STOP) {
-            if (viewModel.msgs.size>1) {
-                with(history.edit()) {
-                    putString(viewModel.currentSession, Gson().toJson(viewModel.toList()).toString())
-                    apply()
-                }
-                with(sessionsPref.edit()){
-                    putString("sessions",Gson().toJson(viewModel.sessions))
-                    apply()
-                }
+    fun save(){
+        if (viewModel.msgs.size > if (systemPrompt.isNotEmpty()){1}else{0}) {
+            history.edit {
+                putString(viewModel.currentSession, Gson().toJson(viewModel.toList()).toString())
+            }
+            sessionsPref.edit {
+                putString("sessions", Gson().toJson(viewModel.sessions))
             }
         }
     }
-    lifecycle.addObserver(observer)
 
     LaunchedEffect(Unit) {
         viewModel.sessions.clear()
-        viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions","[]")!!,object : TypeToken<List<String>>() {}.type))
+        viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions", "[]")!!,
+            object : TypeToken<List<String>>() {}.type))
         val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        var configsList = mutableListOf<String>()
-        currentConfig=currentConfigPref.getString("currentConfig","")!!
+        val configsList = mutableListOf<String>()
+        currentConfig = currentConfigPref.getString("currentConfig", "")!!
         for (i in settingsPref.all) {
             configsList.add(i.key)
         }
@@ -268,13 +260,13 @@ fun MainUI(viewModel: ChatViewModel) {
                 "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
             )
         ).asJsonObject
-        api_url=settings.get("apiUrl").asString;api_key=settings.get("apiKey").asString;model=settings.get("model").asString;systemPrompt=settings.get("systemPrompt").asString
-        //api_url = if (api_url.endsWith("/")) {api_url+"chat/completions"} else {"$api_url/chat/completions"}
+        api_url = settings.get("apiUrl").asString;api_key = settings.get("apiKey").asString;model =
+        settings.get("model").asString;systemPrompt = settings.get("systemPrompt").asString
         if (viewModel.sessions.isEmpty()) {
-            viewModel.sessions.add("新对话"+System.currentTimeMillis().toString())
+            viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
         }
-        viewModel.currentSession=viewModel.sessions.last()
-        if (history.getString(viewModel.currentSession,"")!!.isNotEmpty()) {
+        viewModel.currentSession = viewModel.sessions.last()
+        if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
             viewModel.fromList(
                 Gson().fromJson(
                     history.getString(viewModel.currentSession, "[]")!!,
@@ -282,28 +274,31 @@ fun MainUI(viewModel: ChatViewModel) {
                 ).toMutableList()
             )
         }
-        if(systemPrompt.isNotEmpty()) {
+        if (systemPrompt.isNotEmpty()) {
             viewModel.addSystemMessage(systemPrompt)
         }
         delay(100)
-        scrollState.animateScrollTo(contentHeight,tween(300))
+        scrollState.animateScrollTo(contentHeight, tween(300))
     }
-    LaunchedEffect(if (viewModel.msgs.isNotEmpty())viewModel.msgs.last().content.length else 0) {
-        if (contentHeight - scrollState.value - containerHeight < 10) {
+    // 自动滚动
+    LaunchedEffect(if (viewModel.msgs.isNotEmpty()) viewModel.msgs.last().content.length else 0) {
+        if (contentHeight - scrollState.value - containerHeight < 20) {
             scrollState.scrollTo(contentHeight)
         }
     }
     LaunchedEffect(viewModel.isLoading) {
-        sendImg = if (viewModel.isLoading){ 0 }else { 1 }
-        if (viewModel.msgs.size>1) {
-            with(history.edit()) {
-                putString(viewModel.currentSession, Gson().toJson(viewModel.toList()).toString())
-                apply()
-            }
-            with(sessionsPref.edit()){
-                putString("sessions",Gson().toJson(viewModel.sessions))
-                apply()
-            }
+        // 发送图标
+        sendImg = if (viewModel.isLoading) {
+            0
+        } else {
+            1
+        }
+        save()
+    }
+    LaunchedEffect(Unit) {
+        while (true){
+            delay(2000)
+            save()
         }
     }
     ModalNavigationDrawer(
@@ -312,106 +307,191 @@ fun MainUI(viewModel: ChatViewModel) {
             ModalDrawerSheet(
                 modifier = Modifier.width(250.dp)
             ) {
-                HistoryDrawer(viewModel,context,sessionsPref,history,scrollState,drawerState,vibrator)
+                HistoryDrawer(
+                    viewModel,
+                    context,
+                    sessionsPref,
+                    history,
+                    scrollState,
+                    drawerState,
+                    vibrator
+                )
             }
         },
-        content = { Scaffold(
-        topBar = {
-            TopBar(viewModel,context,drawerState,if(currentConfig!!.isNotEmpty()){currentConfig}else{"请先配置 AI API"},vibrator)
-        },
-        bottomBar = {
-            MessageInputBar(
-                msg = viewModel.inputMsg,
-                onMsgChange = { viewModel.inputMsg = it },
-                onSend = {
-                    if (viewModel.isLoading){
-                        viewModel.cancel=true
-                    }else {
-                        try {
-                            if (it.isNotEmpty()) {
-                                if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
-                                    if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
-                                        val withoutEnter=it.replace("\n","")
-                                        var newName=if (withoutEnter.length>20){withoutEnter.substring(0,20)}else{withoutEnter}
-                                        if (newName in viewModel.sessions){
-                                            newName=newName+System.currentTimeMillis().toString()
-                                        }
-                                        viewModel.sessions.add(newName)
-                                        viewModel.sessions.remove(viewModel.currentSession)
-                                        with (sessionsPref.edit()){
-                                            putString("sessions",Gson().toJson(viewModel.sessions))
-                                            apply()
-                                        }
-                                        with(history.edit()) {
-                                            putString(newName, Gson().toJson(viewModel.toList()).toString())
-                                            remove(viewModel.currentSession)
-                                            apply()
-                                        }
-                                        viewModel.currentSession=newName
-                                    }
-                                    context.hideKeyboard()
-                                    viewModel.addUserMessage(it)
-                                    send(context, viewModel)
-                                    viewModel.inputMsg = ""
-                                    scope.launch {
-                                        scrollState.animateScrollTo(
-                                            contentHeight,
-                                            tween(300)
-                                        )
-                                    }
-                                }else{
-                                    Toast.makeText(context,"请先配置 AI API",
-                                        Toast.LENGTH_SHORT).show()
-                                }
-                            }else{
-                                Toast.makeText(context,"请输入你的问题", Toast.LENGTH_SHORT).show()
-                            }
-                        }catch (e: Exception){
-                            Toast.makeText(context,e.toString(), Toast.LENGTH_SHORT).show()
-                        }
-                    }
+        content = {
+            Scaffold(
+                topBar = {
+                    TopBar(
+                        viewModel, context, drawerState, if (currentConfig!!.isNotEmpty()) {
+                            currentConfig
+                        } else {
+                            "请先配置 AI API"
+                        }, vibrator
+                    )
                 },
-                sendImg = if (sendImg==1){Icons.Default.ArrowUpward}
-                else{ImageVector.vectorResource(R.drawable.ic_rectangle)},
-                viewModel,vibrator
-            )
-        }
-    ) { innerPadding ->
-            SelectionContainer(Modifier.onSizeChanged { size ->
-                containerHeight = size.height
-            }) {
-                Column(
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .verticalScroll(scrollState)
-                        .onSizeChanged { size ->
-                            contentHeight = size.height
-                        }) {
-                    viewModel.msgs.forEachIndexed { i, msg ->
-                        when (msg.role) {
-                            "assistant" -> {
-                                Row {
-                                    Icon(Icons.Default.Api, "")
-                                    if (msg.content.isNotEmpty() || !viewModel.isLoading) {
-                                        if (viewModel.parseMd) {
-                                            InlineMarkdown(
-                                                content = msg.content,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .padding(end = 16.dp),
-                                                context
-                                            )
+                bottomBar = {
+                    MessageInputBar(
+                        msg = viewModel.inputMsg,
+                        onMsgChange = { viewModel.inputMsg = it },
+                        onSend = {
+                            if (viewModel.isLoading) {
+                                viewModel.cancel = true
+                            } else {
+                                try {
+                                    if (it.isNotEmpty()) {
+                                        if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
+                                            if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
+                                                val withoutEnter = it.replace("\n", "")
+                                                var newName = if (withoutEnter.length > 20) {
+                                                    withoutEnter.substring(0, 20)
+                                                } else {
+                                                    withoutEnter
+                                                }
+                                                if (newName in viewModel.sessions) {
+                                                    newName = newName + System.currentTimeMillis()
+                                                        .toString()
+                                                }
+                                                viewModel.sessions.add(newName)
+                                                viewModel.sessions.remove(viewModel.currentSession)
+                                                sessionsPref.edit {
+                                                    putString(
+                                                        "sessions",
+                                                        Gson().toJson(viewModel.sessions)
+                                                    )
+                                                }
+                                                history.edit {
+                                                    putString(
+                                                        newName,
+                                                        Gson().toJson(viewModel.toList()).toString()
+                                                    )
+                                                    remove(viewModel.currentSession)
+                                                }
+                                                viewModel.currentSession = newName
+                                            }
+                                            context.hideKeyboard()
+                                            viewModel.addUserMessage(it)
+                                            send(context, viewModel)
+                                            viewModel.inputMsg = ""
+                                            scope.launch {
+                                                scrollState.animateScrollTo(
+                                                    contentHeight,
+                                                    tween(300)
+                                                )
+                                            }
                                         } else {
-                                            Text(msg.content)
+                                            Toast.makeText(
+                                                context, "请先配置 AI API",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
-                                    }else{
-                                        CircularProgressIndicator(Modifier.size(24.dp))
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "请输入你的问题",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        sendImg = if (sendImg == 1) {
+                            Icons.Default.ArrowUpward
+                        } else {
+                            ImageVector.vectorResource(R.drawable.ic_rectangle)
+                        },
+                        viewModel, vibrator
+                    )
+                }
+            ) { innerPadding ->
+                SelectionContainer(Modifier.onSizeChanged { size ->
+                    containerHeight = size.height
+                }) {
+                    Column(
+                        modifier = Modifier
+                            .padding(innerPadding)
+                            .verticalScroll(scrollState)
+                            .onSizeChanged { size ->
+                                contentHeight = size.height
+                            }) {
+                        viewModel.msgs.forEachIndexed { i, msg ->
+                            when (msg.role) {
+                                "assistant" -> {
+                                    Row {
+                                        Icon(Icons.Default.Api, "")
+                                        if (msg.content.isNotEmpty() || !viewModel.isLoading) {
+                                            if (viewModel.parseMd) {
+                                                InlineMarkdown(
+                                                    content = msg.content,
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .padding(end = 16.dp),
+                                                    context
+                                                )
+                                            } else {
+                                                Text(msg.content)
+                                            }
+                                        } else {
+                                            CircularProgressIndicator(Modifier.size(24.dp))
+                                        }
+                                    }
+                                    Row(
+                                        Modifier
+                                            .align(Alignment.End)
+                                            .padding(end = 24.dp)
+                                    ) {
+                                        if (viewModel.msgs[i].content.isNotEmpty() && !viewModel.isLoading) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.background)
+                                                    .clickable {
+                                                        clickVibrate(vibrator)
+                                                        viewModel.msgs.removeRange(
+                                                            if (viewModel.msgs[i - 1].role == "assistant_reasoning") {
+                                                                i - 1
+                                                            } else {
+                                                                i
+                                                            }, viewModel.msgs.size
+                                                        )
+                                                        send(context, viewModel)
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Refresh,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                                Row(Modifier
-                                    .align(Alignment.End)
-                                    .padding(end = 24.dp)) {
-                                    if (viewModel.msgs[i].content.isNotEmpty() && !viewModel.isLoading) {
+
+                                "assistant_reasoning" -> Row {
+                                    Icon(
+                                        Icons.Default.Api,
+                                        ""
+                                    );Text(msg.content, color = Color.Gray)
+                                }
+
+                                "user" -> {
+                                    Row {
+                                        Text(
+                                            msg.content, Modifier
+                                                .weight(1f)
+                                                .wrapContentWidth(
+                                                    Alignment.End
+                                                )
+                                        );Icon(Icons.Default.AccountCircle, "")
+                                    }
+                                    Row(
+                                        Modifier
+                                            .align(Alignment.End)
+                                            .padding(end = 24.dp)
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(24.dp)
@@ -419,85 +499,38 @@ fun MainUI(viewModel: ChatViewModel) {
                                                 .background(MaterialTheme.colorScheme.background)
                                                 .clickable {
                                                     clickVibrate(vibrator)
-                                                    viewModel.msgs.removeRange(
-                                                        if (viewModel.msgs[i - 1].role == "assistant_reasoning") {
-                                                            i - 1
-                                                        } else {
-                                                            i
-                                                        }, viewModel.msgs.size
-                                                    )
-                                                    send(context, viewModel)
+                                                    if (!viewModel.isLoading) {
+                                                        viewModel.inputMsg =
+                                                            viewModel.msgs[i].content
+                                                        viewModel.msgs.removeRange(
+                                                            i,
+                                                            viewModel.msgs.size
+                                                        )
+                                                    }
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Refresh,
+                                                imageVector = Icons.Default.Edit,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(24.dp)
                                             )
                                         }
                                     }
                                 }
-                            }
 
-                            "assistant_reasoning" -> Row {
-                                Icon(
-                                    Icons.Default.Api,
-                                    ""
-                                );Text(msg.content, color = Color.Gray)
-                            }
-
-                            "user" -> {
-                                Row {
-                                    Text(
-                                        msg.content, Modifier
-                                            .weight(1f)
-                                            .wrapContentWidth(
-                                                Alignment.End
-                                            )
-                                    );Icon(Icons.Default.AccountCircle, "")
+                                else -> Row {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        ""
+                                    );Text(msg.content + "\n")
                                 }
-                                Row(Modifier
-                                    .align(Alignment.End)
-                                    .padding(end = 24.dp)) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.background)
-                                            .clickable {
-                                                clickVibrate(vibrator)
-                                                if (!viewModel.isLoading) {
-                                                    viewModel.inputMsg =
-                                                        viewModel.msgs[i].content
-                                                    viewModel.msgs.removeRange(
-                                                        i,
-                                                        viewModel.msgs.size
-                                                    )
-                                                }
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Edit,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            else -> Row {
-                                Icon(
-                                    Icons.Default.Settings,
-                                    ""
-                                );Text(msg.content + "\n")
                             }
                         }
                     }
                 }
             }
-        }
-})
+        })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -608,8 +641,8 @@ fun MessageInputBar(
                     )
                 }
             }
-            if (maxTokensExpanded){
-                OutlinedTextField(value = viewModel.maxTokens.toString(), onValueChange = {
+            if (maxTokensExpanded) {
+                OutlinedTextField(value = viewModel.maxTokens, onValueChange = {
                     try {
                         viewModel.maxTokens = it
                     } catch (_: Exception) {
@@ -623,8 +656,8 @@ fun MessageInputBar(
             Modifier.width(200.dp)
         ) {
             Slider(value = viewModel.temperature.toFloat(), onValueChange = {
-                val tmp=round(it).toInt()
-                if (tmp!=viewModel.temperature) {
+                val tmp = round(it).toInt()
+                if (tmp != viewModel.temperature) {
                     viewModel.temperature = tmp
                     clickVibrate(vibrator)
                 }
@@ -639,13 +672,13 @@ private fun send(
     viewModel: ChatViewModel
 ) {
     viewModel.isLoading = true
-    viewModel.cancel=false
+    viewModel.cancel = false
     viewModel.updateAIMessage("")
     val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
 
-    var bodyMap=mutableMapOf(
+    val bodyMap = mutableMapOf(
         "model" to model,
         "messages" to viewModel.withoutReasoning(),
         "stream" to true
@@ -654,8 +687,8 @@ private fun send(
         if (viewModel.temperature >= 0) {
             put("temperature", viewModel.temperature.toFloat() / 10)
         }
-        if (viewModel.maxTokensIsNumber()){
-            put("max_tokens",viewModel.maxTokens.toInt())
+        if (viewModel.maxTokensIsNumber()) {
+            put("max_tokens", viewModel.maxTokens.toInt())
         }
     }
     val requestBody = Gson().toJson(bodyMap)
@@ -673,7 +706,7 @@ private fun send(
             if (!response.isSuccessful) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Error: ${response.code}", Toast.LENGTH_SHORT).show()
-                    viewModel.isLoading=false
+                    viewModel.isLoading = false
                 }
                 return@launch
             }
@@ -690,7 +723,7 @@ private fun send(
                                 ?.firstOrNull()
                                 ?.asJsonObject
                             val delta = choices?.getAsJsonObject("delta")
-                            if (viewModel.cancel)break
+                            if (viewModel.cancel) break
                             if (delta?.get("content")?.isJsonNull == false) {
                                 viewModel.updateAIMessage(delta.get("content")?.asString!!)
                             } else {
@@ -716,15 +749,15 @@ private fun send(
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 if (viewModel.msgs.isNotEmpty()) {
-                    if (viewModel.msgs[viewModel.msgs.size-2].role == "user") {
-                        viewModel.inputMsg = viewModel.msgs[viewModel.msgs.size-2].content
+                    if (viewModel.msgs[viewModel.msgs.size - 2].role == "user") {
+                        viewModel.inputMsg = viewModel.msgs[viewModel.msgs.size - 2].content
                     }
                 }
             }
         } finally {
             withContext(Dispatchers.Main) {
                 viewModel.isLoading = false
-                viewModel.cancel=false
+                viewModel.cancel = false
             }
         }
     }
@@ -769,23 +802,21 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                 TextButton(
                     onClick = {
                         openRenameDialog = false
-                        var newName1=newName.text
+                        var newName1 = newName.text
                         viewModel.sessions.remove(editingSession)
-                        if (newName1 in viewModel.sessions){
-                            newName1=newName1+System.currentTimeMillis().toString()
+                        if (newName1 in viewModel.sessions) {
+                            newName1 = newName1 + System.currentTimeMillis().toString()
                         }
                         viewModel.sessions.add(newName1)
-                        with(sessionsPref.edit()) {
+                        sessionsPref.edit {
                             putString("sessions", Gson().toJson(viewModel.sessions))
-                            apply()
                         }
-                        with(history.edit()) {
+                        history.edit {
                             putString(newName1, history.getString(editingSession, null))
                             remove(editingSession)
-                            apply()
                         }
-                        if (editingSession==viewModel.currentSession){
-                            viewModel.currentSession=newName1
+                        if (editingSession == viewModel.currentSession) {
+                            viewModel.currentSession = newName1
                         }
                     }
                 ) { Text("完成") }
@@ -807,15 +838,13 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                     onClick = {
                         openDelDialog = false
                         viewModel.sessions.remove(editingSession)
-                        with(sessionsPref.edit()) {
+                        sessionsPref.edit {
                             putString("sessions", Gson().toJson(viewModel.sessions))
-                            apply()
                         }
-                        with(history.edit()) {
+                        history.edit {
                             remove(editingSession)
-                            apply()
                         }
-                        if (viewModel.sessions.isEmpty() || editingSession==viewModel.currentSession) {
+                        if (viewModel.sessions.isEmpty() || editingSession == viewModel.currentSession) {
                             viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
                             viewModel.currentSession = viewModel.sessions.last()
                         }
@@ -880,42 +909,42 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
         itemsIndexed(viewModel.sessions.reversed()) { _, session ->
             Box(
                 modifier = Modifier.combinedClickable(
-                onClick = {
-                    scope.launch { drawerState.close() }
-                    if (viewModel.isLoading) {
-                        Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
-                    } else {
-                        viewModel.currentSession = session
-                        if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
-                            viewModel.fromList(
-                                Gson().fromJson(
-                                    history.getString(viewModel.currentSession, "[]")!!,
-                                    Array<Message>::class.java
-                                ).toMutableList()
-                            )
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        if (viewModel.isLoading) {
+                            Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
                         } else {
-                            viewModel.msgs.clear()
+                            viewModel.currentSession = session
+                            if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
+                                viewModel.fromList(
+                                    Gson().fromJson(
+                                        history.getString(viewModel.currentSession, "[]")!!,
+                                        Array<Message>::class.java
+                                    ).toMutableList()
+                                )
+                            } else {
+                                viewModel.msgs.clear()
+                                if (systemPrompt.isNotEmpty()) {
+                                    viewModel.addSystemMessage(systemPrompt)
+                                }
+                            }
                             if (systemPrompt.isNotEmpty()) {
                                 viewModel.addSystemMessage(systemPrompt)
                             }
+                            scope.launch {
+                                scrollState.scrollTo(0)
+                                delay(100)
+                                scrollState.animateScrollTo(contentHeight, tween(300))
+                            }
                         }
-                        if (systemPrompt.isNotEmpty()) {
-                            viewModel.addSystemMessage(systemPrompt)
-                        }
-                        scope.launch {
-                            scrollState.scrollTo(0)
-                            delay(100)
-                            scrollState.animateScrollTo(contentHeight, tween(300))
-                        }
+                    },
+                    onLongClick = {
+                        clickVibrate(vibrator)
+                        editingSession = session
+                        newName = TextFieldValue(session, selection = TextRange(0, session.length))
+                        showHistoryMenu = true
                     }
-                },
-                onLongClick = {
-                    clickVibrate(vibrator)
-                    editingSession = session
-                    newName = TextFieldValue(session, selection = TextRange(0, session.length))
-                    showHistoryMenu = true
-                }
-            )) {
+                )) {
                 Text(
                     session,
                     Modifier
@@ -949,9 +978,7 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
         title = {
             Column {
                 Text(
-                    if (viewModel.currentSession.isNotEmpty()) {
-                        viewModel.currentSession
-                    } else {
+                    viewModel.currentSession.ifEmpty {
                         stringResource(R.string.app_name)
                     }, maxLines = 1
                 )
