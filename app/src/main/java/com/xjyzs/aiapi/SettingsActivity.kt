@@ -102,7 +102,7 @@ class SettingsActivity : ComponentActivity() {
 @Composable
 fun SettingsUI(viewModel: SettingsViewModel) {
     val context = LocalContext.current
-    val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    val assistantsPref = context.getSharedPreferences("assistants", Context.MODE_PRIVATE)
     val currentConfigPref = context.getSharedPreferences("currentConfigPref", Context.MODE_PRIVATE)
     val scrollState = rememberScrollState()
     var modelsExpanded by remember { mutableStateOf(false) }
@@ -154,17 +154,17 @@ fun SettingsUI(viewModel: SettingsViewModel) {
     }
     LaunchedEffect(Unit) {
         currentConfig = currentConfigPref.getString("currentConfig", "")!!
-        for (i in settingsPref.all) {
+        for (i in assistantsPref.all) {
             configsList.add(i.key)
         }
-        val settings = JsonParser.parseString(
-            settingsPref.getString(
+        val assistants = JsonParser.parseString(
+            assistantsPref.getString(
                 currentConfig,
                 "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
             )
         ).asJsonObject
-        apiUrl = settings.get("apiUrl").asString;apiKey = settings.get("apiKey").asString;model =
-        settings.get("model").asString;systemPrompt = settings.get("systemPrompt").asString
+        apiUrl = assistants.get("apiUrl").asString;apiKey = assistants.get("apiKey").asString;model =
+        assistants.get("model").asString;systemPrompt = assistants.get("systemPrompt").asString
     }
     Scaffold(
         topBar = {
@@ -223,16 +223,16 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                         onClick = {
                             currentConfig = i
                             configsExpanded = false
-                            val settings = JsonParser.parseString(
-                                settingsPref.getString(
+                            val assistants = JsonParser.parseString(
+                                assistantsPref.getString(
                                     currentConfig,
                                     "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
                                 )
                             ).asJsonObject
-                            apiUrl = settings.get("apiUrl").asString;apiKey =
-                            settings.get("apiKey").asString;model =
-                            settings.get("model").asString;systemPrompt =
-                            settings.get("systemPrompt").asString
+                            apiUrl = assistants.get("apiUrl").asString;apiKey =
+                            assistants.get("apiKey").asString;model =
+                            assistants.get("model").asString;systemPrompt =
+                            assistants.get("systemPrompt").asString
                         }
                     )
                 }
@@ -305,7 +305,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
             )
             Button({
                 if (currentConfig.isNotEmpty()) {
-                    settingsPref.edit {
+                    assistantsPref.edit {
                         putString(
                             currentConfig,
                             Gson().toJson(
@@ -340,7 +340,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                 TextButton(
                     onClick = {
                         openDelDialog = false
-                        settingsPref.edit {
+                        assistantsPref.edit {
                             remove(deletingConfig)
                         }
                         configsList.remove(deletingConfig)

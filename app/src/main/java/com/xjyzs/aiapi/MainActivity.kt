@@ -37,6 +37,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -82,6 +84,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -95,7 +98,9 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
@@ -124,7 +129,6 @@ import kotlin.math.round
 
 @Keep
 data class Message(val role: String, val content: String)
-@SuppressLint("MutableCollectionMutableState")
 class ChatViewModel : ViewModel() {
     var msgs = mutableStateListOf<Message>()
     var sessions = mutableStateListOf<String>()
@@ -152,26 +156,28 @@ class ChatViewModel : ViewModel() {
 
 
     fun updateAIMessage(content: String) {
+        val newContent=content.replaceFirst(Regex("^\n{0,2}"), "")
         viewModelScope.launch(Dispatchers.Main) {
             if (msgs.isEmpty() || msgs.last().role != "assistant") {
-                msgs.add(Message("assistant", content))
+                msgs.add(Message("assistant", newContent))
             } else {
                 val lastMsg = msgs.last()
-                msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + content)
+                msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + newContent)
             }
         }
     }
 
     fun updateAIReasoningMessage(content: String) {
+        val newContent=content.replaceFirst(Regex("^\n{0,2}"), "")
         viewModelScope.launch(Dispatchers.Main) {
             if (msgs.last().role == "assistant" && msgs.last().content == "") {
                 msgs.removeAt(msgs.size - 1)
             }
             if (msgs.isEmpty() || msgs.last().role != "assistant_reasoning") {
-                msgs.add(Message("assistant_reasoning", content))
+                msgs.add(Message("assistant_reasoning", newContent))
             } else {
                 val lastMsg = msgs.last()
-                msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + content)
+                msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + newContent)
             }
         }
     }
@@ -194,7 +200,7 @@ class ChatViewModel : ViewModel() {
 
     fun maxTokensIsNumber(): Boolean {
         try {
-            maxTokens.toInt()
+            maxTokens.toLong()
             return true
         } catch (_: Exception) {
             return false
@@ -232,6 +238,8 @@ fun MainUI(viewModel: ChatViewModel) {
     var currentConfig = currentConfigPref.getString("currentConfig", "")
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     val scope = rememberCoroutineScope()
+    val assistantThinkingClosed = remember {mutableStateListOf<Int>()}
+    val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     fun save(){
         if (viewModel.msgs.size > if (systemPrompt.isNotEmpty()){1}else{0}) {
@@ -245,23 +253,25 @@ fun MainUI(viewModel: ChatViewModel) {
     }
 
     LaunchedEffect(Unit) {
-        viewModel.sessions.clear()
+        viewModel.temperature=settingsPref.getInt("temperature",-1)
+        viewModel.maxTokens=settingsPref.getString("maxTokens","")!!
+        viewModel.parseMd=settingsPref.getBoolean("parseMd",true)
         viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions", "[]")!!,
             object : TypeToken<List<String>>() {}.type))
-        val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val assistantsPref = context.getSharedPreferences("assistants", Context.MODE_PRIVATE)
         val configsList = mutableListOf<String>()
         currentConfig = currentConfigPref.getString("currentConfig", "")!!
-        for (i in settingsPref.all) {
+        for (i in assistantsPref.all) {
             configsList.add(i.key)
         }
-        val settings = JsonParser.parseString(
-            settingsPref.getString(
+        val assistants = JsonParser.parseString(
+            assistantsPref.getString(
                 currentConfig,
                 "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
             )
         ).asJsonObject
-        api_url = settings.get("apiUrl").asString;api_key = settings.get("apiKey").asString;model =
-        settings.get("model").asString;systemPrompt = settings.get("systemPrompt").asString
+        api_url = assistants.get("apiUrl").asString;api_key = assistants.get("apiKey").asString;model =
+        assistants.get("model").asString;systemPrompt = assistants.get("systemPrompt").asString
         if (viewModel.sessions.isEmpty()) {
             viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
         }
@@ -326,7 +336,7 @@ fun MainUI(viewModel: ChatViewModel) {
                             currentConfig
                         } else {
                             "请先配置 AI API"
-                        }, vibrator
+                        }, vibrator,settingsPref
                     )
                 },
                 bottomBar = {
@@ -401,7 +411,7 @@ fun MainUI(viewModel: ChatViewModel) {
                         } else {
                             ImageVector.vectorResource(R.drawable.ic_rectangle)
                         },
-                        viewModel, vibrator
+                        viewModel, vibrator,settingsPref
                     )
                 }
             ) { innerPadding ->
@@ -470,11 +480,34 @@ fun MainUI(viewModel: ChatViewModel) {
                                     }
                                 }
 
-                                "assistant_reasoning" -> Row {
-                                    Icon(
-                                        Icons.Default.Api,
-                                        ""
-                                    );Text(msg.content, color = Color.Gray)
+                                "assistant_reasoning" -> {
+                                    var expanded = false
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            ImageVector.vectorResource(R.drawable.ic_deep_think),
+                                            null
+                                        )
+                                        if (i in assistantThinkingClosed) {
+                                            IconButton({ assistantThinkingClosed.remove(i) }) {
+                                                Icon(Icons.Default.ExpandMore, null)
+                                            }
+                                        } else {
+                                            expanded = true
+                                            IconButton({ assistantThinkingClosed.add(i) }) {
+                                                Icon(
+                                                    Icons.Default.ExpandMore,
+                                                    null,
+                                                    Modifier.rotate(180f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (expanded) {
+                                        Row {
+                                            Spacer(Modifier.size(22.dp))
+                                            Text(msg.content, color = Color.Gray)
+                                        }
+                                    }
                                 }
 
                                 "user" -> {
@@ -522,8 +555,8 @@ fun MainUI(viewModel: ChatViewModel) {
                                 else -> Row {
                                     Icon(
                                         Icons.Default.Settings,
-                                        ""
-                                    );Text(msg.content + "\n")
+                                        null
+                                    );Text(msg.content + "\n",color= MaterialTheme.colorScheme.primary)
                                 }
                             }
                         }
@@ -541,7 +574,8 @@ fun MessageInputBar(
     onSend: (String) -> Unit,
     sendImg: ImageVector,
     viewModel: ChatViewModel,
-    vibrator: Vibrator
+    vibrator: Vibrator,
+    settingsPref: SharedPreferences
 ) {
     var temperatureExpanded by remember { mutableStateOf(false) }
     var maxTokensExpanded by remember { mutableStateOf(false) }
@@ -641,19 +675,17 @@ fun MessageInputBar(
                     )
                 }
             }
-            if (maxTokensExpanded) {
-                OutlinedTextField(value = viewModel.maxTokens, onValueChange = {
-                    try {
-                        viewModel.maxTokens = it
-                    } catch (_: Exception) {
-                    }
-                })
-            }
         }
         DropdownMenu( // 温度
             expanded = temperatureExpanded,
-            onDismissRequest = { temperatureExpanded = false },
-            Modifier.width(200.dp)
+            onDismissRequest = {
+                temperatureExpanded = false
+                settingsPref.edit {
+                    putInt("temperature",viewModel.temperature)
+                }
+                               },
+            Modifier.width(200.dp),
+            offset = DpOffset(10.dp,0.dp)
         ) {
             Slider(value = viewModel.temperature.toFloat(), onValueChange = {
                 val tmp = round(it).toInt()
@@ -662,6 +694,29 @@ fun MessageInputBar(
                     clickVibrate(vibrator)
                 }
             }, valueRange = -1f..20f, steps = 20)
+        }
+        DropdownMenu( // 最大 token 数
+            expanded = maxTokensExpanded,
+            onDismissRequest = {
+                maxTokensExpanded = false
+                settingsPref.edit {
+                    putString("maxTokens",viewModel.maxTokens)
+                }
+            },
+            Modifier.width(150.dp),
+            offset = DpOffset(100.dp,0.dp)
+        ) {
+            OutlinedTextField(
+                value = viewModel.maxTokens, onValueChange = {
+                    try {
+                        viewModel.maxTokens = it
+                    } catch (_: Exception) {
+                    }
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                isError = !(viewModel.maxTokensIsNumber() || viewModel.maxTokens.isEmpty()),
+                singleLine = true
+            )
         }
     }
 }
@@ -966,7 +1021,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator) {
+private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator,settingsPref: SharedPreferences) {
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     TopAppBar(
@@ -1023,12 +1078,18 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
                             Checkbox(viewModel.parseMd, onCheckedChange = {
                                 clickVibrate(vibrator)
                                 viewModel.parseMd = !viewModel.parseMd
+                                settingsPref.edit {
+                                    putBoolean("parseMd",viewModel.parseMd)
+                                }
                             })
                         }
                     },
                     onClick = {
                         clickVibrate(vibrator)
                         viewModel.parseMd = !viewModel.parseMd
+                        settingsPref.edit {
+                            putBoolean("parseMd",viewModel.parseMd)
+                        }
                     })
             }
         }

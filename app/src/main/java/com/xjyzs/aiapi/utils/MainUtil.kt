@@ -59,7 +59,7 @@ class MarkdownParser {
 
     // 行内样式
     private val boldRegex = """\*\*(.*?)\*\*""".toRegex()
-    private val italicRegex = """\*(.*?)\*""".toRegex()
+    private val italicRegex = """(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)""".toRegex()
     private val codeRegex = """`(.*?)`""".toRegex()
     private val deleteRegex = """~~(.*?)~~""".toRegex()
 
@@ -243,7 +243,8 @@ class MarkdownParser {
     @Composable
     private fun parseInlineStyles(text: String): AnnotatedString {
         val annotatedString = buildAnnotatedString {
-            append(text)
+            val cleanText = text.replace("*", "\u200B").replace("`","\u200B").replace("~","\u200B")
+            append(cleanText)
 
             // 处理粗体
             boldRegex.findAll(text).forEach { result ->
