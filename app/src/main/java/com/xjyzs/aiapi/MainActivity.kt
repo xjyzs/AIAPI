@@ -1,6 +1,5 @@
 package com.xjyzs.aiapi
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -11,7 +10,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.Keep
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -77,6 +79,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,12 +88,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -101,8 +108,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -139,6 +149,7 @@ class ChatViewModel : ViewModel() {
     var parseMd by mutableStateOf(true)
     var temperature by mutableIntStateOf(-1)
     var maxTokens by mutableStateOf("")
+    var isInReasoningContext by mutableStateOf(false)
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -154,31 +165,62 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-
     fun updateAIMessage(content: String) {
-        val newContent=content.replaceFirst(Regex("^\n{0,2}"), "")
-        viewModelScope.launch(Dispatchers.Main) {
-            if (msgs.isEmpty() || msgs.last().role != "assistant") {
-                msgs.add(Message("assistant", newContent))
-            } else {
-                val lastMsg = msgs.last()
-                msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + newContent)
+        if (isInReasoningContext) {
+            updateAIReasoningMessage(content)
+            return
+        }
+        val newContent = content.replaceFirst(Regex("^\n{0,2}"), "")
+        if (msgs.isEmpty() || msgs.last().role != "assistant") {
+            msgs.add(Message("assistant", content.replaceFirst(Regex("^\n{0,2}"), "")))
+        } else {
+            if (content.startsWith("<think>")) {
+                if (msgs.last().content.isEmpty()) {
+                    isInReasoningContext = true
+                    val match = Regex("<think>").find(content)!!
+                    updateAIReasoningMessage(
+                        content.substring(
+                            match.range.last + 1,
+                            content.length
+                        )
+                    )
+                    return
+                }
             }
+            val lastMsg = msgs.last()
+            msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + newContent)
         }
     }
 
     fun updateAIReasoningMessage(content: String) {
-        val newContent=content.replaceFirst(Regex("^\n{0,2}"), "")
-        viewModelScope.launch(Dispatchers.Main) {
-            if (msgs.last().role == "assistant" && msgs.last().content == "") {
-                msgs.removeAt(msgs.size - 1)
+        val newContent = content.replaceFirst(Regex("^\n{0,2}"), "")
+        if (isInReasoningContext && '>' in content) {
+            if ("</think>" in msgs.last().content + content) {
+                val match = Regex("</think>").find(msgs.last().content + content)
+                if (match != null) {
+                    msgs[msgs.lastIndex] = Message(
+                        "assistant_reasoning",
+                        msgs.last().content.substring(0, match.range.first)
+                    )
+                    isInReasoningContext = false
+                    updateAIMessage(
+                        (msgs.last().content+content).substring(
+                            match.range.last+1,
+                            msgs.last().content.length+content.length
+                        )
+                    )
+                    return
+                }
             }
-            if (msgs.isEmpty() || msgs.last().role != "assistant_reasoning") {
-                msgs.add(Message("assistant_reasoning", newContent))
-            } else {
-                val lastMsg = msgs.last()
-                msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + newContent)
-            }
+        }
+        if (msgs.last().role == "assistant" && msgs.last().content == "") {
+            msgs.removeAt(msgs.size - 1)
+        }
+        if (msgs.isEmpty() || msgs.last().role != "assistant_reasoning") {
+            msgs.add(Message("assistant_reasoning", newContent))
+        } else {
+            val lastMsg = msgs.last()
+            msgs[msgs.lastIndex] = lastMsg.copy(content = lastMsg.content + newContent)
         }
     }
 
@@ -297,6 +339,7 @@ fun MainUI(viewModel: ChatViewModel) {
         }
     }
     LaunchedEffect(viewModel.isLoading) {
+        viewModel.isInReasoningContext=false
         // 发送图标
         sendImg = if (viewModel.isLoading) {
             0
@@ -304,6 +347,21 @@ fun MainUI(viewModel: ChatViewModel) {
             1
         }
         save()
+        try {
+            if (viewModel.msgs.last().content.startsWith("<think>")) {
+                val match = Regex("(?s)<think>(.*?)</think>").find(viewModel.msgs.last().content)
+                if (match != null) {
+                    val part1 = match.groups[1]!!.value
+                    val part2 = viewModel.msgs.last().content.substring(
+                        match.range.last + 1,
+                        viewModel.msgs.last().content.length
+                    )
+                    viewModel.msgs.removeAt(viewModel.msgs.lastIndex)
+                    viewModel.msgs.add(Message("assistant_reasoning", part1))
+                    viewModel.msgs.add(Message("assistant", part2))
+                }
+            }
+        }catch (_: Exception){}
     }
     LaunchedEffect(Unit) {
         while (true){
@@ -818,7 +876,6 @@ private fun send(
     }
 }
 
-@SuppressLint("CommitPrefEdits")
 @Composable
 private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPref: SharedPreferences, history: SharedPreferences, scrollState: ScrollState, drawerState: DrawerState, vibrator: Vibrator) {
     var showHistoryMenu by remember { mutableStateOf(false) }
@@ -828,16 +885,8 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
     var newName by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
-    DropdownMenu(showHistoryMenu, onDismissRequest = { showHistoryMenu = false }) {
-        DropdownMenuItem({ Text("重命名") }, onClick = {
-            showHistoryMenu = false
-            openRenameDialog = true
-        })
-        DropdownMenuItem({ Text("删除") }, onClick = {
-            showHistoryMenu = false
-            openDelDialog = true
-        })
-    }
+    var expandedIndex by remember { mutableStateOf<Int?>(null) }
+    val buttonPositions = remember { mutableStateMapOf<Int, Offset>() }
     if (openRenameDialog) {
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
@@ -961,7 +1010,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
         }
     }
     LazyColumn {
-        itemsIndexed(viewModel.sessions.reversed()) { _, session ->
+        itemsIndexed(viewModel.sessions.reversed()) { i, session ->
             Box(
                 modifier = Modifier.combinedClickable(
                     onClick = {
@@ -995,11 +1044,14 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                     },
                     onLongClick = {
                         clickVibrate(vibrator)
+                        expandedIndex = i
                         editingSession = session
                         newName = TextFieldValue(session, selection = TextRange(0, session.length))
                         showHistoryMenu = true
                     }
-                )) {
+                ).onGloballyPositioned { coordinates ->
+                    buttonPositions[i] = coordinates.localToWindow(Offset.Zero)
+                }) {
                 Text(
                     session,
                     Modifier
@@ -1013,6 +1065,62 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         Color.Unspecified
                     },
                     maxLines = 1
+                )
+            }
+        }
+    }
+    if (showHistoryMenu) {
+        Popup(
+            alignment = Alignment.TopStart,
+            offset = IntOffset(x = 300, buttonPositions[expandedIndex]!!.y.toInt()),
+            onDismissRequest = { showHistoryMenu = false },
+            properties = PopupProperties(focusable = true)
+        ) {
+            val transition = updateTransition(targetState = showHistoryMenu, label = "menuTransition")
+            val scale by transition.animateFloat(
+                transitionSpec = { tween(durationMillis = 120, easing = LinearOutSlowInEasing) },
+                label = "scale"
+            ) { if (it) 1f else 0.8f }
+
+            val alpha by transition.animateFloat(
+                transitionSpec = { tween(durationMillis = 120) },
+                label = "alpha"
+            ) { if (it) 1f else 0f }
+            Column(
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        this.alpha = alpha
+                    }
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                    .width(100.dp)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("重命名") },
+                    onClick = {
+                        showHistoryMenu = false
+                        openRenameDialog = true
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("删除") },
+                    onClick = {
+                        showHistoryMenu = false
+                        openDelDialog = true
+                    }
                 )
             }
         }
