@@ -324,8 +324,12 @@ fun createNewSession(viewModel: ChatViewModel,context: Context,isInNewSessionChe
     } else {
         viewModel.msgs.clear()
         viewModel.addSystemMessage(systemPrompt)
-        viewModel.currentSession = "新对话" + System.currentTimeMillis().toString()
-        viewModel.sessions.add(viewModel.currentSession)
+        if (viewModel.sessions.last().startsWith("新对话") && viewModel.sessions.last().endsWith("\u200B")){
+            viewModel.currentSession = viewModel.sessions.last()
+        }else {
+            viewModel.currentSession = "新对话" + System.currentTimeMillis().toString() + "\u200B"
+            viewModel.sessions.add(viewModel.currentSession)
+        }
     }
 }
 

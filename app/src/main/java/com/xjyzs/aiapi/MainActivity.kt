@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -48,7 +47,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -322,11 +320,7 @@ fun MainUI(viewModel: ChatViewModel) {
         viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions", "[]")!!,
             object : TypeToken<List<String>>() {}.type))
         val assistantsPref = context.getSharedPreferences("assistants", Context.MODE_PRIVATE)
-        val configsList = mutableListOf<String>()
         currentConfig = currentConfigPref.getString("currentConfig", "")!!
-        for (i in assistantsPref.all) {
-            configsList.add(i.key)
-        }
         val assistants = JsonParser.parseString(
             assistantsPref.getString(
                 currentConfig,
@@ -336,7 +330,7 @@ fun MainUI(viewModel: ChatViewModel) {
         api_url = assistants.get("apiUrl").asString;api_key = assistants.get("apiKey").asString;model =
         assistants.get("model").asString;systemPrompt = assistants.get("systemPrompt").asString
         if (viewModel.sessions.isEmpty()) {
-            viewModel.sessions.add("新对话" + System.currentTimeMillis().toString())
+            viewModel.sessions.add("新对话" + System.currentTimeMillis().toString()+"\u200B")
         }
         viewModel.currentSession = viewModel.sessions.last()
         if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
@@ -356,7 +350,7 @@ fun MainUI(viewModel: ChatViewModel) {
     }
 
     // 自动滚动
-    LaunchedEffect(if (viewModel.msgs.isNotEmpty()) viewModel.msgs.last().content.length else 0) {
+    LaunchedEffect(if (viewModel.msgs.isNotEmpty()) viewModel.msgs.last().content.length else 0,viewModel.isLoading) {
         if (!lazyListState.isScrollInProgress) {
             if (lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == viewModel.msgs.lastIndex) {
                 if (distanceToBottomCurrentElement < 500) {
@@ -445,13 +439,15 @@ fun MainUI(viewModel: ChatViewModel) {
                         msg = viewModel.inputMsg,
                         onMsgChange = { viewModel.inputMsg = it },
                         onSend = {
+                            viewModel.sessions.remove(viewModel.currentSession)
+                            viewModel.sessions.add(viewModel.currentSession)
                             if (viewModel.isLoading) {
                                 cancel = true
                             } else {
                                 try {
                                     if (it.isNotEmpty()) {
                                         if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
-                                            if ((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system") && "新对话" in viewModel.currentSession) {
+                                            if (((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system")) && viewModel.currentSession.startsWith("新对话") && viewModel.currentSession.endsWith("\u200B")) {
                                                 val withoutEnter = it.replace("\n", "")
                                                 var newName = if (withoutEnter.length > 20) {
                                                     withoutEnter.substring(0, 20)
