@@ -156,10 +156,12 @@ class ChatViewModel : ViewModel() {
 
     fun addSystemMessage(content: String) {
         if (content.isNotEmpty()) {
-            if (msgs.isNotEmpty()) {
+            if (msgs.isEmpty()) {
+                msgs.add(Message("system", content))
+            } else if (msgs.first().role == "system") {
                 msgs[0] = Message("system", content)
             } else {
-                msgs.add(Message("system", content))
+                msgs.add(0,Message("system", content))
             }
         }
     }
