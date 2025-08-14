@@ -359,7 +359,6 @@ fun MainUI(viewModel: ChatViewModel) {
     LaunchedEffect(if (viewModel.msgs.isNotEmpty()) viewModel.msgs.last().content.length else 0) {
         if (!lazyListState.isScrollInProgress) {
             if (lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == viewModel.msgs.lastIndex) {
-                println(distanceToBottomCurrentElement)
                 if (distanceToBottomCurrentElement < 500) {
                     lazyListState.scrollToItem(viewModel.msgs.lastIndex,2147483647)
                 }
