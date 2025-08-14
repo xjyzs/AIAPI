@@ -750,9 +750,11 @@ fun MessageInputBar(
     var maxTokensExpanded by remember { mutableStateOf(false) }
     val imeHeight = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeHeight) {
-        if (imeHeight > 0 && distanceToBottomCurrentElement<100) {
-            scope.launch {
-                lazyListState.scrollToItem(viewModel.msgs.lastIndex, 2147483647)
+        if (viewModel.msgs.isNotEmpty()) {
+            if (imeHeight > 0 && distanceToBottomCurrentElement < 100) {
+                scope.launch {
+                    lazyListState.scrollToItem(viewModel.msgs.lastIndex, 2147483647)
+                }
             }
         }
     }
