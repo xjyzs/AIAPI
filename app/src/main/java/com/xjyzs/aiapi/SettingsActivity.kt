@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -137,7 +138,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                     .build()
                 val response: Response = client.newCall(request).execute()
                 if (response.isSuccessful) {
-                    val json = JsonParser.parseString(response.body?.string()).asJsonObject
+                    val json = JsonParser.parseString(response.body.string()).asJsonObject
                     val data = json.getAsJsonArray("data")
                     for (i in data) {
                         viewModel.models.add(i.asJsonObject.get("id").asString)
@@ -216,7 +217,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                                     deletingConfig = i
                                     openDelDialog = true
                                 }) {
-                                    Icon(Icons.Default.Delete, contentDescription = null)
+                                    Icon(Icons.Default.DeleteForever, contentDescription = null)
                                 }
                             }
                         },

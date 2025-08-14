@@ -1,13 +1,12 @@
 package com.xjyzs.aiapi.utils
 
-import android.app.Activity
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,25 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.xjyzs.aiapi.ChatViewModel
+import com.xjyzs.aiapi.api_key
+import com.xjyzs.aiapi.api_url
+import com.xjyzs.aiapi.cancel
+import com.xjyzs.aiapi.model
+import com.xjyzs.aiapi.systemPrompt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 fun clickVibrate(vibrator: Vibrator){
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -41,11 +59,6 @@ fun clickVibrate(vibrator: Vibrator){
             attributes
         )
     }
-}
-
-fun Context.hideKeyboard() {
-    val inputMethodManager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-    inputMethodManager.hideSoftInputFromWindow((this as? Activity)?.currentFocus?.windowToken, 0)
 }
 
 class MarkdownParser {
@@ -300,6 +313,117 @@ fun InlineMarkdown(content: String, modifier: Modifier = Modifier,context: Conte
                 block()
             }
             Text("\n", lineHeight = 0.sp)
+        }
+    }
+}
+
+
+fun createNewSession(viewModel: ChatViewModel,context: Context,isInNewSessionCheck: Boolean =true) {
+    if (isInNewSessionCheck && (viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system")) {
+        Toast.makeText(context, "已在新对话中", Toast.LENGTH_SHORT).show()
+    } else {
+        viewModel.msgs.clear()
+        viewModel.addSystemMessage(systemPrompt)
+        viewModel.currentSession = "新对话" + System.currentTimeMillis().toString()
+        viewModel.sessions.add(viewModel.currentSession)
+    }
+}
+
+
+fun send(
+    context: Context,
+    viewModel: ChatViewModel
+) {
+    viewModel.isLoading = true
+    cancel = false
+    viewModel.updateAIMessage("")
+    val client = OkHttpClient.Builder()
+        .readTimeout(0, TimeUnit.SECONDS)
+        .build()
+
+    val bodyMap = mutableMapOf(
+        "model" to model,
+        "messages" to viewModel.withoutReasoning(),
+        "stream" to true
+    )
+    bodyMap.apply {
+        if (viewModel.temperature >= 0) {
+            put("temperature", viewModel.temperature.toFloat() / 10)
+        }
+        if (viewModel.maxTokensIsNumber()) {
+            put("max_tokens", viewModel.maxTokens.toInt())
+        }
+    }
+    val requestBody = Gson().toJson(bodyMap)
+        .toRequestBody("application/json".toMediaTypeOrNull())
+
+    val request = Request.Builder()
+        .url(api_url)
+        .post(requestBody)
+        .addHeader("Authorization", "Bearer $api_key")
+        .build()
+
+    viewModel.viewModelScope.launch(Dispatchers.IO) {
+        try {
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${response.code}", Toast.LENGTH_SHORT).show()
+                    viewModel.isLoading = false
+                }
+                return@launch
+            }
+
+            response.body.byteStream().use { stream ->
+                BufferedReader(InputStreamReader(stream)).use { reader ->
+                    var line: String?
+                    //解析
+                    while (reader.readLine().also { line = it } != null) {
+                        try {
+                            val cleanLine = line?.removePrefix("data: ")?.trim()
+                            val json = JsonParser.parseString(cleanLine).asJsonObject
+                            val choices = json.getAsJsonArray("choices")
+                                ?.firstOrNull()
+                                ?.asJsonObject
+                            val delta = choices?.getAsJsonObject("delta")
+                            if (cancel) break
+                            if (delta?.get("content")?.isJsonNull == false) {
+                                viewModel.updateAIMessage(delta.get("content")?.asString!!)
+                            } else {
+                                viewModel.updateAIReasoningMessage(delta?.get("reasoning_content")?.asString!!)
+                            }
+                            if (!choices.get("finish_reason").isJsonNull) {
+                                if (choices.get("finish_reason").asString != "stop") {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(
+                                            context,
+                                            choices.get("finish_reason").asString,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            }
+            response.close()
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                if (viewModel.msgs.isNotEmpty()) {
+                    if (viewModel.msgs.first().role == "assistant" && viewModel.msgs.first().content.isEmpty() && viewModel.msgs[1].role == "user") {
+                        viewModel.inputMsg = viewModel.msgs[1].content
+                        viewModel.msgs.removeRange(0,2)
+                    }
+                }
+            }
+        } finally {
+            withContext(Dispatchers.Main) {
+                viewModel.isLoading = false
+                cancel = false
+            }
         }
     }
 }

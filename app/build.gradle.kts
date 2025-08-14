@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.xjyzs.aiapi"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.1.1"
+        versionCode = 7
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         androidResources. localeFilters+= listOf("zh")
@@ -70,7 +70,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            isShrinkResources=true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -80,23 +80,29 @@ android {
                     excludes += setOf(
                         "DebugProbesKt.bin",
                         "kotlin-tooling-metadata.json",
-                        "okhttp3/**",
                         "META-INF/**",
                         "kotlin/**"
                     )
                 }
             }
-            androidResources {
-                noCompress += setOf("so", "arsc")
+            tasks.configureEach {
+                doLast {
+                    outputs.files.forEach { outputDir ->
+                        val filesToDelete = setOf("PublicSuffixDatabase.list")
+                        for (i in filesToDelete){
+                            val file=outputDir.resolve(i)
+                            if (file.exists()) {
+                                file.delete()
+                            }
+                        }
+                    }
+                }
             }
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
-    }
-    kotlinOptions {
-        jvmTarget = "21"
     }
     buildFeatures {
         compose = true
