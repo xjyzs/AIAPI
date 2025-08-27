@@ -7,20 +7,39 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -29,8 +48,11 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -57,6 +79,97 @@ fun clickVibrate(vibrator: Vibrator){
         vibrator.vibrate(
             VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK),
             attributes
+        )
+    }
+}
+
+@Composable
+fun FreeDropdownMenu(expanded: Boolean,
+                     onDismissRequest: () -> Unit,
+                     offset: IntOffset = IntOffset(0,0),
+                     width: Dp = 150.dp,
+                     content: @Composable (() -> Unit)) {
+    if (expanded) {
+        Popup(
+            alignment = Alignment.TopStart,
+            offset = offset,
+            onDismissRequest = onDismissRequest,
+            properties = PopupProperties(focusable = true),
+        ) {
+            val transition = updateTransition(targetState = expanded, label = "menuTransition")
+            val scale by transition.animateFloat(
+                transitionSpec = { tween(durationMillis = 120, easing = LinearOutSlowInEasing) },
+                label = "scale"
+            ) { if (it) 1f else 0.8f }
+
+            val alpha by transition.animateFloat(
+                transitionSpec = { tween(durationMillis = 120) },
+                label = "alpha"
+            ) { if (it) 1f else 0f }
+            Column(
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        this.alpha = alpha
+                    }
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                    .width(width)
+            ) { content() }
+        }
+    }
+}
+
+@Composable
+fun SmallTextField(value: String, onValueChange: (String) -> Unit, modifier: Modifier= Modifier, placeholder: @Composable (() -> Unit)? = null,keyboardOptions: KeyboardOptions= KeyboardOptions.Default,showFrame: Boolean=true,showHandle: Boolean=true) {
+    val selectionColors = TextSelectionColors(
+        handleColor = if (showHandle){MaterialTheme.colorScheme.primary}else{Color.Transparent},
+        backgroundColor = MaterialTheme.colorScheme.primary
+    )
+    CompositionLocalProvider(LocalTextSelectionColors provides selectionColors) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = modifier
+                .heightIn(min = 36.dp),
+            textStyle = LocalTextStyle.current.copy(
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            maxLines = 7,
+            keyboardOptions = keyboardOptions,
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = if (showFrame) {
+                        Modifier
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline,
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .padding(vertical = 5.dp, horizontal = 10.dp)
+                    } else {
+                        modifier.padding(vertical = 5.dp, horizontal = 10.dp)
+                    }
+                ) {
+                    if (value.isEmpty() && placeholder != null) {
+                        placeholder()
+                    }
+                    innerTextField()
+                }
+            }
         )
     }
 }
@@ -259,7 +372,7 @@ class MarkdownParser {
             val cleanText = text.replace("*", "\u200B").replace("`","\u200B").replace("~","\u200B")
             append(cleanText)
 
-            // 处理粗体
+            // 粗体
             boldRegex.findAll(text).forEach { result ->
                 addStyle(
                     SpanStyle(fontWeight = FontWeight.ExtraBold),
@@ -268,7 +381,7 @@ class MarkdownParser {
                 )
             }
 
-            // 处理斜体
+            // 斜体
             italicRegex.findAll(text).forEach { result ->
                 addStyle(
                     SpanStyle(fontStyle = FontStyle.Italic),
@@ -277,7 +390,7 @@ class MarkdownParser {
                 )
             }
 
-            // 处理删除线
+            // 删除线
             deleteRegex.findAll(text).forEach { result ->
                 addStyle(
                     SpanStyle(textDecoration = TextDecoration.LineThrough),
@@ -286,7 +399,7 @@ class MarkdownParser {
                 )
             }
 
-            // 处理代码样式
+            // 代码
             codeRegex.findAll(text).forEach { result ->
                 addStyle(
                     SpanStyle(
@@ -324,7 +437,7 @@ fun createNewSession(viewModel: ChatViewModel,context: Context,isInNewSessionChe
     } else {
         viewModel.msgs.clear()
         viewModel.addSystemMessage(systemPrompt)
-        if (viewModel.sessions.last().startsWith("新对话") && viewModel.sessions.last().endsWith("\u200B")){
+        if (viewModel.sessions.isNotEmpty() && viewModel.sessions.last().startsWith("新对话") && viewModel.sessions.last().endsWith("\u200B")){
             viewModel.currentSession = viewModel.sessions.last()
         }else {
             viewModel.currentSession = "新对话" + System.currentTimeMillis().toString() + "\u200B"
@@ -340,14 +453,13 @@ fun send(
 ) {
     viewModel.isLoading = true
     cancel = false
-    viewModel.updateAIMessage("")
     val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
 
     val bodyMap = mutableMapOf(
         "model" to model,
-        "messages" to viewModel.withoutReasoning(),
+        "messages" to viewModel.msgsToSend(),
         "stream" to true
     )
     bodyMap.apply {
@@ -355,7 +467,7 @@ fun send(
             put("temperature", viewModel.temperature.toFloat() / 10)
         }
         if (viewModel.maxTokensIsNumber()) {
-            put("max_tokens", viewModel.maxTokens.toInt())
+            put("max_tokens", viewModel.maxTokens.toLong())
         }
     }
     val requestBody = Gson().toJson(bodyMap)
@@ -367,6 +479,7 @@ fun send(
         .addHeader("Authorization", "Bearer $api_key")
         .build()
 
+    viewModel.updateAIMessage("")
     viewModel.viewModelScope.launch(Dispatchers.IO) {
         try {
             val response = client.newCall(request).execute()

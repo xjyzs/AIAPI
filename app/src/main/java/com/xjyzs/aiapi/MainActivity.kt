@@ -11,26 +11,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.Keep
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -43,7 +35,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -94,17 +85,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -120,8 +108,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -129,13 +115,16 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.xjyzs.aiapi.ui.theme.AIAPITheme
+import com.xjyzs.aiapi.utils.FreeDropdownMenu
 import com.xjyzs.aiapi.utils.InlineMarkdown
+import com.xjyzs.aiapi.utils.SmallTextField
 import com.xjyzs.aiapi.utils.clickVibrate
 import com.xjyzs.aiapi.utils.createNewSession
 import com.xjyzs.aiapi.utils.send
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.max
 import kotlin.math.round
 
 @Keep
@@ -149,6 +138,8 @@ class ChatViewModel : ViewModel() {
     var parseMd by mutableStateOf(true)
     var temperature by mutableIntStateOf(-1)
     var maxTokens by mutableStateOf("")
+    var maxContext by mutableStateOf("")
+    val assistantThinkingClosed = mutableStateListOf<Int>()
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -225,8 +216,19 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun withoutReasoning(): List<Message> {
-        return msgs
+    fun msgsToSend(): List<Message> {
+        val tmpMsgs =msgs
+            .filter { it.role != "assistant_reasoning" && it.role != "system" }
+            .map { it.copy() }.toMutableList()
+        val tmpMsgs2= if (maxContextIsNumber()){
+            tmpMsgs.subList(if (maxContextIsNumber()){max(tmpMsgs.size-maxContext.toInt(),0)}else{0},tmpMsgs.size)
+        } else {
+            tmpMsgs
+        }
+        if (msgs.first().role=="system"){
+            tmpMsgs2.add(0,msgs.first())
+        }
+        return tmpMsgs2
             .filter { it.role != "assistant_reasoning" }
             .map { it.copy() }
     }
@@ -245,6 +247,15 @@ class ChatViewModel : ViewModel() {
     fun maxTokensIsNumber(): Boolean {
         try {
             maxTokens.toLong()
+            return true
+        } catch (_: Exception) {
+            return false
+        }
+    }
+
+    fun maxContextIsNumber(): Boolean {
+        try {
+            maxContext.toInt()
             return true
         } catch (_: Exception) {
             return false
@@ -286,7 +297,6 @@ fun MainUI(viewModel: ChatViewModel) {
     var currentConfig = currentConfigPref.getString("currentConfig", "")
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     val scope = rememberCoroutineScope()
-    val assistantThinkingClosed = remember {mutableStateListOf<Int>()}
     val settingsPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -318,6 +328,7 @@ fun MainUI(viewModel: ChatViewModel) {
     LaunchedEffect(Unit) {
         viewModel.temperature=settingsPref.getInt("temperature",-1)
         viewModel.maxTokens=settingsPref.getString("maxTokens","")!!
+        viewModel.maxContext=settingsPref.getString("maxContext","")!!
         viewModel.parseMd=settingsPref.getBoolean("parseMd",true)
         viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions", "[]")!!,
             object : TypeToken<List<String>>() {}.type))
@@ -499,7 +510,7 @@ fun MainUI(viewModel: ChatViewModel) {
                         } else {
                             ImageVector.vectorResource(R.drawable.ic_rectangle)
                         },
-                        viewModel, vibrator, settingsPref, lazyListState, scope,distanceToBottomCurrentElement
+                        viewModel, vibrator, lazyListState, scope,distanceToBottomCurrentElement
                     )
                 }
             ) { innerPadding ->
@@ -577,7 +588,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                         }
                                     }
                                     Row(Modifier.padding(start = 24.dp, bottom = 10.dp)) {
-                                        if (viewModel.msgs[i].content.isNotEmpty() && !viewModel.isLoading || i!=viewModel.msgs.lastIndex) {
+                                        if (!viewModel.isLoading || i!=viewModel.msgs.lastIndex) {
                                             IconButton({
                                                 clickVibrate(vibrator)
                                                 viewModel.msgs.removeRange(
@@ -624,7 +635,7 @@ fun MainUI(viewModel: ChatViewModel) {
 
 
                                 "assistant_reasoning" -> {
-                                    val expanded = i !in assistantThinkingClosed
+                                    val expanded = i !in viewModel.assistantThinkingClosed
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             ImageVector.vectorResource(R.drawable.ic_deep_think),
@@ -633,7 +644,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                         )
                                         if (expanded) {
                                             IconButton(
-                                                { assistantThinkingClosed.add(i) },
+                                                { viewModel.assistantThinkingClosed.add(i) },
                                                 Modifier.size(30.dp)
                                             ) {
                                                 Icon(
@@ -645,7 +656,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                             }
                                         } else {
                                             IconButton(
-                                                { assistantThinkingClosed.remove(i) },
+                                                { viewModel.assistantThinkingClosed.remove(i) },
                                                 Modifier.size(30.dp)
                                             ) {
                                                 Icon(
@@ -739,13 +750,10 @@ fun MessageInputBar(
     sendImg: ImageVector,
     viewModel: ChatViewModel,
     vibrator: Vibrator,
-    settingsPref: SharedPreferences,
     lazyListState: LazyListState,
     scope: CoroutineScope,
     distanceToBottomCurrentElement:Int
 ) {
-    var temperatureExpanded by remember { mutableStateOf(false) }
-    var maxTokensExpanded by remember { mutableStateOf(false) }
     val imeHeight = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeHeight) {
         if (viewModel.msgs.isNotEmpty()) {
@@ -766,36 +774,17 @@ fun MessageInputBar(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BasicTextField(
+                SmallTextField(
                     value = msg,
                     onValueChange = onMsgChange,
-                    modifier = Modifier
-                        .weight(1f).heightIn(min = 36.dp),
-                    textStyle = LocalTextStyle.current.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    maxLines = 7,
-                    decorationBox = { innerTextField ->
-                        Box(
-                            modifier = Modifier
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    shape = RoundedCornerShape(18.dp)
-                                )
-                                .padding(vertical = 5.dp, horizontal = 10.dp)
-                        ) {
-                            if (msg.isEmpty()) {
-                                Text(
-                                    text = "输入消息...",
-                                    style = LocalTextStyle.current.copy(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                            innerTextField()
-                        }
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            text = "输入消息...",
+                            style = LocalTextStyle.current.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
                     }
                 )
                 Spacer(Modifier.size(6.dp))
@@ -818,82 +807,6 @@ fun MessageInputBar(
                     )
                 }
             }
-            Row {
-                TextButton(
-                    { temperatureExpanded = true },
-                    Modifier.height(28.dp),
-                    contentPadding = PaddingValues(5.dp),
-                    shape = RectangleShape
-                ) {
-                    Text(
-                        "温度:${
-                            if (viewModel.temperature >= 0) {
-                                viewModel.temperature.toFloat() / 10
-                            } else {
-                                "未设置"
-                            }
-                        }"
-                    )
-                }
-                TextButton(
-                    { maxTokensExpanded = !maxTokensExpanded },
-                    Modifier.height(28.dp),
-                    contentPadding = PaddingValues(5.dp),
-                    shape = RectangleShape
-                ) {
-                    Text(
-                        "最大 token 数:${
-                            if (viewModel.maxTokensIsNumber()) {
-                                viewModel.maxTokens
-                            } else {
-                                "未设置"
-                            }
-                        }"
-                    )
-                }
-            }
-        }
-        DropdownMenu( // 温度
-            expanded = temperatureExpanded,
-            onDismissRequest = {
-                temperatureExpanded = false
-                settingsPref.edit {
-                    putInt("temperature",viewModel.temperature)
-                }
-                               },
-            Modifier.width(200.dp),
-            offset = DpOffset(10.dp,0.dp)
-        ) {
-            Slider(value = viewModel.temperature.toFloat(), onValueChange = {
-                val tmp = round(it).toInt()
-                if (tmp != viewModel.temperature) {
-                    viewModel.temperature = tmp
-                    clickVibrate(vibrator)
-                }
-            }, valueRange = -1f..20f, steps = 20)
-        }
-        DropdownMenu( // 最大 token 数
-            expanded = maxTokensExpanded,
-            onDismissRequest = {
-                maxTokensExpanded = false
-                settingsPref.edit {
-                    putString("maxTokens",viewModel.maxTokens)
-                }
-            },
-            Modifier.width(150.dp),
-            offset = DpOffset(100.dp,0.dp)
-        ) {
-            OutlinedTextField(
-                value = viewModel.maxTokens, onValueChange = {
-                    try {
-                        viewModel.maxTokens = it
-                    } catch (_: Exception) {
-                    }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                isError = !(viewModel.maxTokensIsNumber() || viewModel.maxTokens.isEmpty()),
-                singleLine = true
-            )
         }
     }
 }
@@ -974,7 +887,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                             remove(editingSession)
                         }
                         if (editingSession == viewModel.currentSession) {
-                            createNewSession(viewModel,context, isInNewSessionCheck = false)
+                            createNewSession(viewModel, context, isInNewSessionCheck = false)
                         }
                     }
                 ) { Text("删除") }
@@ -1025,6 +938,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                             Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
                         } else {
                             viewModel.currentSession = session
+                            viewModel.assistantThinkingClosed.clear()
                             viewModel.fromList(
                                 Gson().fromJson(
                                     history.getString(viewModel.currentSession, "[]")!!,
@@ -1035,22 +949,26 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         }
                         scope.launch {
                             try {
-                                lazyListState.scrollToItem(viewModel.msgs.lastIndex,2147483647)
-                            }catch (_: Exception){}
+                                lazyListState.scrollToItem(viewModel.msgs.lastIndex, 2147483647)
+                            } catch (_: Exception) {
+                            }
                         }
                     },
                     onLongClick = {
                         clickVibrate(vibrator)
                         expandedIndex = i
                         editingSession = session
-                        newName = TextFieldValue(session, selection = TextRange(0, session.length))
+                        newName = TextFieldValue(
+                            if (session.startsWith("新对话") && session.endsWith("\u200B")) "新对话" else session,
+                            selection = TextRange(0, session.length)
+                        )
                         showHistoryMenu = true
                     }
                 ).onGloballyPositioned { coordinates ->
                     buttonPositions[i] = coordinates.localToWindow(Offset.Zero)
                 }) {
                 Text(
-                    session,
+                    if (session.startsWith("新对话") && session.endsWith("\u200B")) "新对话" else session,
                     Modifier
                         .padding(16.dp)
                         .fillMaxWidth(),
@@ -1061,66 +979,51 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                     } else {
                         Color.Unspecified
                     },
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
         }
     }
-    if (showHistoryMenu) {
-        Popup(
-            alignment = Alignment.TopStart,
-            offset = IntOffset(x = 300, buttonPositions[expandedIndex]!!.y.toInt()),
-            onDismissRequest = { showHistoryMenu = false },
-            properties = PopupProperties(focusable = true)
-        ) {
-            val transition = updateTransition(targetState = showHistoryMenu, label = "menuTransition")
-            val scale by transition.animateFloat(
-                transitionSpec = { tween(durationMillis = 120, easing = LinearOutSlowInEasing) },
-                label = "scale"
-            ) { if (it) 1f else 0.8f }
-
-            val alpha by transition.animateFloat(
-                transitionSpec = { tween(durationMillis = 120) },
-                label = "alpha"
-            ) { if (it) 1f else 0f }
-            Column(
-                modifier = Modifier
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        this.alpha = alpha
-                    }
-                    .shadow(
-                        elevation = 8.dp,
-                        shape = MaterialTheme.shapes.extraSmall
-                    )
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        shape = MaterialTheme.shapes.extraSmall
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = MaterialTheme.shapes.extraSmall
-                    )
-                    .width(100.dp)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("重命名") },
-                    onClick = {
-                        showHistoryMenu = false
-                        openRenameDialog = true
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("删除") },
-                    onClick = {
-                        showHistoryMenu = false
-                        openDelDialog = true
-                    }
-                )
+    FreeDropdownMenu(
+        showHistoryMenu,
+        { showHistoryMenu = false },
+        IntOffset(x = 300, buttonPositions[expandedIndex]?.y?.toInt() ?: 0),
+        100.dp
+    ) {
+        DropdownMenuItem(
+            text = { Text("重命名") },
+            onClick = {
+                showHistoryMenu = false
+                openRenameDialog = true
             }
-        }
+        )
+        DropdownMenuItem(
+            text = { Text("删除") },
+            onClick = {
+                showHistoryMenu = false
+                openDelDialog = true
+            }
+        )
+    }
+    FreeDropdownMenu(
+        expanded = showHistoryMenu,
+        onDismissRequest = { showHistoryMenu = false },
+        offset = IntOffset(x = 300, buttonPositions[expandedIndex]?.y?.toInt() ?: 0)
+    ) {
+        DropdownMenuItem(
+            text = { Text("重命名") },
+            onClick = {
+                showHistoryMenu = false
+                openRenameDialog = true
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("删除") },
+            onClick = {
+                showHistoryMenu = false
+                openDelDialog = true
+            }
+        )
     }
 }
 
@@ -1129,16 +1032,35 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
 private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator,settingsPref: SharedPreferences) {
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
+    var temperatureExpanded by remember { mutableStateOf(false) }
+    var maxTokensExpanded by remember { mutableStateOf(false) }
+    var maxContextExpanded by remember { mutableStateOf(false) }
+    var temperatureChanged by remember { mutableStateOf(false) }
+    var maxTokensChanged by remember { mutableStateOf(false) }
+    var maxContextChanged by remember { mutableStateOf(false) }
+    var temperaturePosition: Offset by remember { mutableStateOf(Offset(0F, 0F))}
+    var maxTokensPosition: Offset by remember { mutableStateOf(Offset(0F, 0F))}
+    var maxContextPosition: Offset by remember { mutableStateOf(Offset(0F, 0F))}
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx().toInt() }
     TopAppBar(
         navigationIcon = {
             IconButton({ scope.launch { clickVibrate(vibrator);drawerState.open() } }) {
-                Icon(ImageVector.vectorResource(R.drawable.ic_msgs_list), null, tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    ImageVector.vectorResource(R.drawable.ic_msgs_list),
+                    null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         },
         title = {
             Column {
                 Text(
-                    viewModel.currentSession.ifEmpty {
+                    (if (viewModel.currentSession.startsWith("新对话") && viewModel.currentSession.endsWith(
+                            "\u200B"
+                        )
+                    ) "新对话" else viewModel.currentSession).ifEmpty {
                         stringResource(R.string.app_name)
                     }, maxLines = 1
                 )
@@ -1153,7 +1075,30 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
             IconButton(onClick = { showMenu = !showMenu;clickVibrate(vibrator) }) {
                 Icon(imageVector = Icons.Default.MoreVert, null)
             }
-            DropdownMenu(showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenu(showMenu, onDismissRequest = {
+                showMenu = false
+                temperatureExpanded = false
+                maxTokensExpanded = false
+                maxContextExpanded = false
+                if (temperatureChanged) {
+                    settingsPref.edit {
+                        putInt("temperature", viewModel.temperature)
+                    }
+                    temperatureChanged = false
+                }
+                if (maxTokensChanged) {
+                    settingsPref.edit {
+                        putString("maxTokens", viewModel.maxTokens)
+                    }
+                    maxTokensChanged = false
+                }
+                if (maxContextChanged) {
+                    settingsPref.edit {
+                        putString("maxContext", viewModel.maxContext)
+                    }
+                    maxTokensChanged = false
+                }
+            }, offset = DpOffset(x = (-10).dp, y = 0.dp)) {
                 DropdownMenuItem(
                     text = { Text("设置") },
                     onClick = {
@@ -1178,8 +1123,63 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
                 )
                 DropdownMenuItem(
                     text = {
+                        Text(
+                            "温度:${
+                                if (viewModel.temperature >= 0) {
+                                    viewModel.temperature.toFloat() / 10
+                                } else {
+                                    "未设置"
+                                }
+                            }",
+                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                temperaturePosition = coordinates.localToWindow(Offset.Zero)
+                            }
+                        )
+                    },
+                    onClick = { temperatureExpanded = !temperatureExpanded }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                "最大 token 数:${
+                                    if (viewModel.maxTokensIsNumber()) {
+                                        viewModel.maxTokens
+                                    } else {
+                                        "未设置"
+                                    }
+                                }",
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    maxTokensPosition = coordinates.localToWindow(Offset.Zero)
+                                }
+                            )
+                        }
+                    },
+                    onClick = { maxTokensExpanded = !maxTokensExpanded }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                "上下文数:${
+                                    if (viewModel.maxContextIsNumber()) {
+                                        viewModel.maxContext
+                                    } else {
+                                        "未设置"
+                                    }
+                                }",
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    maxContextPosition = coordinates.localToWindow(Offset.Zero)
+                                }
+                            )
+                        }
+                    },
+                    onClick = { maxContextExpanded = !maxContextExpanded }
+                )
+                DropdownMenuItem(
+                    text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("解析md")
+                            Text("解析md", Modifier.weight(1f))
                             Checkbox(viewModel.parseMd, onCheckedChange = {
                                 clickVibrate(vibrator)
                                 viewModel.parseMd = !viewModel.parseMd
@@ -1195,8 +1195,48 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
                         settingsPref.edit {
                             putBoolean("parseMd", viewModel.parseMd)
                         }
-                    })
+                    }
+                )
             }
         }
     )
+    FreeDropdownMenu(temperatureExpanded,{temperatureExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},temperaturePosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+        Slider(value = viewModel.temperature.toFloat(), onValueChange = {
+            val tmp = round(it).toInt()
+            if (tmp != viewModel.temperature) {
+                viewModel.temperature = tmp
+                clickVibrate(vibrator)
+            }
+            temperatureChanged = true
+        }, valueRange = -1f..20f, steps = 20,
+            modifier = Modifier.width(500.dp))
+    }
+    FreeDropdownMenu(maxTokensExpanded,{maxTokensExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},maxTokensPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+        SmallTextField(
+            value = viewModel.maxTokens, onValueChange = {
+                try {
+                    viewModel.maxTokens = it
+                } catch (_: Exception) {
+                }
+                maxTokensChanged = true
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+            showFrame = false
+        )
+    }
+    FreeDropdownMenu(maxContextExpanded,{maxContextExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},maxContextPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+        SmallTextField(
+            value = viewModel.maxContext, onValueChange = {
+                try {
+                    viewModel.maxContext = it
+                } catch (_: Exception) {
+                }
+                maxContextChanged = true
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+            showFrame = false
+        )
+    }
 }

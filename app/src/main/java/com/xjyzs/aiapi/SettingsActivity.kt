@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -299,7 +298,7 @@ fun SettingsUI(viewModel: SettingsViewModel) {
                 }
             }
             TextField(
-                label = { Text("提示词") },
+                label = { Text("系统提示词") },
                 value = systemPrompt,
                 onValueChange = { systemPrompt = it },
                 modifier = Modifier.fillMaxWidth()
