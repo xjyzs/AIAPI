@@ -12,8 +12,8 @@ android {
         applicationId = "com.xjyzs.aiapi"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.2.0"
+        versionCode = 8
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         androidResources. localeFilters+= listOf("zh")
@@ -36,7 +36,7 @@ android {
 
     flavorDimensions += "abi"
     productFlavors {
-        val releaseSigningConfig = if (signingConfigs.findByName("release") != null) {
+        val signingConfig = if (signingConfigs.findByName("release") != null) {
             signingConfigs.getByName("release")
         } else {
             signingConfigs.getByName("debug")
@@ -44,26 +44,26 @@ android {
         create("x86") {
             dimension = "abi"
             ndk { abiFilters.add("x86") }
-            signingConfig = releaseSigningConfig
+            this.signingConfig = signingConfig
         }
         create("x86_64") {
             dimension = "abi"
             ndk { abiFilters.add("x86_64") }
-            signingConfig = releaseSigningConfig
+            this.signingConfig = signingConfig
         }
         create("arm") {
             dimension = "abi"
             ndk { abiFilters.add("armeabi-v7a") }
-            signingConfig = releaseSigningConfig
+            this.signingConfig = signingConfig
         }
         create("arm64") {
             dimension = "abi"
             ndk { abiFilters.add("arm64-v8a") }
-            signingConfig = releaseSigningConfig
+            this.signingConfig = signingConfig
         }
         create("universal") {
             dimension = "abi"
-            signingConfig = releaseSigningConfig
+            this.signingConfig = signingConfig
         }
     }
 

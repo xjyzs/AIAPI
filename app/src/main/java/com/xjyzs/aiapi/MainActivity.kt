@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -38,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -140,6 +142,7 @@ class ChatViewModel : ViewModel() {
     var maxTokens by mutableStateOf("")
     var maxContext by mutableStateOf("")
     val assistantThinkingClosed = mutableStateListOf<Int>()
+    var isEditing by mutableStateOf(false)
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -510,7 +513,7 @@ fun MainUI(viewModel: ChatViewModel) {
                         } else {
                             ImageVector.vectorResource(R.drawable.ic_rectangle)
                         },
-                        viewModel, vibrator, lazyListState, scope,distanceToBottomCurrentElement
+                        viewModel, vibrator, lazyListState, scope,distanceToBottomCurrentElement,history
                     )
                 }
             ) { innerPadding ->
@@ -701,6 +704,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                                         viewModel.msgs.size
                                                     )
                                                 }
+                                                viewModel.isEditing = true
                                             },
                                             Modifier.size(24.dp)
                                         ) {
@@ -752,7 +756,8 @@ fun MessageInputBar(
     vibrator: Vibrator,
     lazyListState: LazyListState,
     scope: CoroutineScope,
-    distanceToBottomCurrentElement:Int
+    distanceToBottomCurrentElement:Int,
+    history: SharedPreferences
 ) {
     val imeHeight = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeHeight) {
@@ -771,6 +776,34 @@ fun MessageInputBar(
             .imePadding(), shadowElevation = 8.dp
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            if (viewModel.isEditing) {
+                Box(
+                    Modifier
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(10.dp))
+                ) {
+                    Row {
+                        Icon(Icons.Default.Edit, null)
+                        Text("正在编辑消息", Modifier.weight(1f))
+                        IconButton(
+                            {
+                                viewModel.fromList(
+                                    Gson().fromJson(
+                                        history.getString(viewModel.currentSession, "[]")!!,
+                                        Array<Message>::class.java
+                                    ).toMutableList()
+                                )
+                                viewModel.addSystemMessage(systemPrompt)
+                                viewModel.inputMsg = ""
+                                viewModel.isEditing = false
+                            },
+                            Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Add, null, Modifier.rotate(45f))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.size(6.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1200,7 +1233,7 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
             }
         }
     )
-    FreeDropdownMenu(temperatureExpanded,{temperatureExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},temperaturePosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+    FreeDropdownMenu(temperatureExpanded,{temperatureExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},temperaturePosition.y.toInt()+with(density){85.dp.toPx().toInt()}), width = 150.dp) {
         Slider(value = viewModel.temperature.toFloat(), onValueChange = {
             val tmp = round(it).toInt()
             if (tmp != viewModel.temperature) {
@@ -1209,9 +1242,9 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
             }
             temperatureChanged = true
         }, valueRange = -1f..20f, steps = 20,
-            modifier = Modifier.width(500.dp))
+            modifier = Modifier.height(40.dp))
     }
-    FreeDropdownMenu(maxTokensExpanded,{maxTokensExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},maxTokensPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+    FreeDropdownMenu(maxTokensExpanded,{maxTokensExpanded=false},IntOffset(screenWidthPx-with(density){280.dp.toPx().toInt()},maxTokensPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
         SmallTextField(
             value = viewModel.maxTokens, onValueChange = {
                 try {
@@ -1222,10 +1255,11 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
-            showFrame = false
+            showFrame = false,
+            showHandle = false
         )
     }
-    FreeDropdownMenu(maxContextExpanded,{maxContextExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},maxContextPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+    FreeDropdownMenu(maxContextExpanded,{maxContextExpanded=false},IntOffset(screenWidthPx-with(density){280.dp.toPx().toInt()},maxContextPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
         SmallTextField(
             value = viewModel.maxContext, onValueChange = {
                 try {
@@ -1236,7 +1270,8 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
-            showFrame = false
+            showFrame = false,
+            showHandle = false
         )
     }
 }

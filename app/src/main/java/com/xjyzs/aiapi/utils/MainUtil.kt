@@ -87,7 +87,7 @@ fun clickVibrate(vibrator: Vibrator){
 fun FreeDropdownMenu(expanded: Boolean,
                      onDismissRequest: () -> Unit,
                      offset: IntOffset = IntOffset(0,0),
-                     width: Dp = 150.dp,
+                     width: Dp = 100.dp,
                      content: @Composable (() -> Unit)) {
     if (expanded) {
         Popup(
@@ -135,7 +135,11 @@ fun FreeDropdownMenu(expanded: Boolean,
 @Composable
 fun SmallTextField(value: String, onValueChange: (String) -> Unit, modifier: Modifier= Modifier, placeholder: @Composable (() -> Unit)? = null,keyboardOptions: KeyboardOptions= KeyboardOptions.Default,showFrame: Boolean=true,showHandle: Boolean=true) {
     val selectionColors = TextSelectionColors(
-        handleColor = if (showHandle){MaterialTheme.colorScheme.primary}else{Color.Transparent},
+        handleColor = if (showHandle) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color.Transparent
+        },
         backgroundColor = MaterialTheme.colorScheme.primary
     )
     CompositionLocalProvider(LocalTextSelectionColors provides selectionColors) {
