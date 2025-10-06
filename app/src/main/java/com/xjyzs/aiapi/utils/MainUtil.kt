@@ -489,7 +489,7 @@ fun send(
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Error: ${response.code}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "错误: ${response.code}", Toast.LENGTH_SHORT).show()
                     viewModel.isLoading = false
                 }
                 return@launch
@@ -532,7 +532,7 @@ fun send(
             response.close()
         } catch (e: Exception) {
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "错误: ${e.message}", Toast.LENGTH_SHORT).show()
                 if (viewModel.msgs.isNotEmpty()) {
                     if (viewModel.msgs.first().role == "assistant" && viewModel.msgs.first().content.isEmpty() && viewModel.msgs[1].role == "user") {
                         viewModel.inputMsg = viewModel.msgs[1].content

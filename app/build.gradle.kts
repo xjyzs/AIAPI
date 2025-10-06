@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.xjyzs.aiapi"
-        minSdk = 24
+        minSdk = 29
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.2.1"
+        versionCode = 9
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         androidResources. localeFilters+= listOf("zh")

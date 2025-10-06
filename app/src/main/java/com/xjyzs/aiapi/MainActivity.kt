@@ -482,6 +482,7 @@ fun MainUI(viewModel: ChatViewModel) {
                                             keyboardController?.hide()
                                             focusManager.clearFocus()
                                             viewModel.addUserMessage(it)
+                                            viewModel.isEditing = false
                                             send(context, viewModel)
                                             viewModel.inputMsg = ""
                                             scope.launch {
