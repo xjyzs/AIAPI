@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -181,6 +182,8 @@ fun SmallTextField(value: String, onValueChange: (String) -> Unit, modifier: Mod
 class MarkdownParser {
     // 代码块
     private val codeBlockRegex = """```(.*?)\n([\s\S]*?)\s*```""".toRegex()
+    // 分界线
+    private val dividerRegex = "(?m)^\\s{0,3}(?:-{3,}|\\*{3,})\\s*$".toRegex()
 
     // 块级元素
     private val headerRegex = """^(#{1,6})\s*(.*)""".toRegex()
@@ -188,30 +191,40 @@ class MarkdownParser {
     private val orderedListRegex = """^(\d+)\.\s+(.*)""".toRegex()
 
     // 行内样式
-    private val boldRegex = """\*\*(.*?)\*\*""".toRegex()
-    private val italicRegex = """(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)""".toRegex()
-    private val codeRegex = """`(.*?)`""".toRegex()
-    private val deleteRegex = """~~(.*?)~~""".toRegex()
+    private val boldRegex = """(\*\*|__)(.+?)\1""".toRegex()
+    private val italicRegex = """(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.+?)(?<!_)_(?!_)""".toRegex()
+    private val codeRegex = """`(.+?)`""".toRegex()
+    private val deleteRegex = """~~(.+?)~~""".toRegex()
+    private val underLineRegex = """\+\+(.+?)\+\+""".toRegex()
 
     fun parse(content: String, context: Context): List<@Composable () -> Unit> {
         val blocks = mutableListOf<@Composable () -> Unit>()
 
         var remainingText = content
 
-        while (true) {
+        while (remainingText.isNotEmpty()) {
             val codeBlockMatch = codeBlockRegex.find(remainingText)
+            val dividerMatch = dividerRegex.find(remainingText)
 
-            val precedingText = if (codeBlockMatch != null) {
-                remainingText.substring(0, codeBlockMatch.range.first)
-            } else {
-                remainingText
+            val nextMatch = listOfNotNull(codeBlockMatch, dividerMatch)
+                .minByOrNull { it.range.first }
+
+            if (nextMatch == null) {
+                parseRegularText(remainingText, blocks)
+                break
             }
-            parseRegularText(precedingText, blocks)
-            if (codeBlockMatch == null) break
-            val (language, code) = codeBlockMatch.destructured
-            blocks.add { CodeBlock(code, language, context = context) }
 
-            remainingText = remainingText.substring(codeBlockMatch.range.last + 1)
+            val precedingText = remainingText.substring(0, nextMatch.range.first)
+            parseRegularText(precedingText, blocks)
+
+            if (nextMatch == codeBlockMatch) {
+                val (language, code) = codeBlockMatch.destructured
+                blocks.add { CodeBlock(code, language, context = context) }
+            } else if (nextMatch == dividerMatch) {
+                blocks.add { HorizontalDivider() }
+            }
+
+            remainingText = remainingText.substring(nextMatch.range.last + 1)
         }
 
         return blocks
@@ -373,8 +386,29 @@ class MarkdownParser {
     @Composable
     private fun parseInlineStyles(text: String): AnnotatedString {
         val annotatedString = buildAnnotatedString {
-            val cleanText = text.replace("*", "\u200B").replace("`","\u200B").replace("~","\u200B")
-            append(cleanText)
+            val singleRegex = listOf(
+                "(\\*|_)(.+?)\\1",
+                "(`)(.+?)\\1"
+            )
+            val doubleRegex = listOf(
+                "(\\*\\*|__)(.+?)\\1",
+                "(~~)(.+?)\\1",
+                "(\\+\\+)(.+?)\\1"
+            )
+            var cleanText = text
+            for (i in doubleRegex) {
+                cleanText = cleanText.replace(Regex(i)) { matchResult ->
+                    val content = matchResult.groups[2]?.value ?: ""
+                    "\u200B\u200B$content\u200B\u200B"
+                }
+            }
+            for (i in singleRegex) {
+                cleanText = cleanText.replace(Regex(i)) { matchResult ->
+                    val content = matchResult.groups[2]?.value ?: ""
+                    "\u200B$content\u200B"
+                }
+            }
+
 
             // 粗体
             boldRegex.findAll(text).forEach { result ->
@@ -402,6 +436,16 @@ class MarkdownParser {
                     result.range.last - 1
                 )
             }
+
+            // 下划线
+            underLineRegex.findAll(text).forEach { result ->
+                addStyle(
+                    SpanStyle(textDecoration = TextDecoration.Underline),
+                    result.range.first + 1,
+                    result.range.last
+                )
+            }
+            append(cleanText)
 
             // 代码
             codeRegex.findAll(text).forEach { result ->
