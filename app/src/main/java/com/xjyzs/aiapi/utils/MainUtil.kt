@@ -534,6 +534,9 @@ fun send(
             if (!response.isSuccessful) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                    viewModel.errorMsg=response.body.string()
+                    viewModel.errorDialogExpanded=true
+                    viewModel.errorCode=response.code
                     viewModel.isLoading = false
                 }
                 return@launch

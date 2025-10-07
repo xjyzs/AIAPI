@@ -34,10 +34,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
@@ -143,6 +145,9 @@ class ChatViewModel : ViewModel() {
     var maxContext by mutableStateOf("")
     val assistantThinkingClosed = mutableStateListOf<Int>()
     var isEditing by mutableStateOf(false)
+    var errorMsg by mutableStateOf("")
+    var errorCode by mutableIntStateOf(0)
+    var errorDialogExpanded by mutableStateOf(false)
 
     fun addUserMessage(content: String) {
         msgs.add(Message("user", content))
@@ -421,6 +426,13 @@ fun MainUI(viewModel: ChatViewModel) {
                 }catch (_: Exception){}
             }
         }
+    }
+    if (viewModel.errorDialogExpanded) {
+        AlertDialog(
+            onDismissRequest = { viewModel.errorDialogExpanded = false },
+            title = { Text("错误: ${viewModel.errorCode}") },
+            text = { SelectionContainer { Column(Modifier.verticalScroll(rememberScrollState())) { Text(viewModel.errorMsg) } }},
+            confirmButton = {})
     }
     ModalNavigationDrawer(
         drawerState = drawerState,
