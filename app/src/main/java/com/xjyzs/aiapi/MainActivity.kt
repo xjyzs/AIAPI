@@ -160,7 +160,7 @@ class ChatViewModel : ViewModel() {
             } else if (msgs.first().role == "system") {
                 msgs[0] = Message("system", content)
             } else {
-                msgs.add(0,Message("system", content))
+                msgs.add(0, Message("system", content))
             }
         }
     }
@@ -170,7 +170,11 @@ class ChatViewModel : ViewModel() {
             updateAIReasoningMessage(content)
             return
         }
-        val newContent = if (msgs.last().content.length<=2 || msgs.last().role!="assistant"){content.replaceFirst(Regex("^\n{0,2}"), "")}else{content}
+        val newContent = if (msgs.last().content.length <= 2 || msgs.last().role != "assistant") {
+            content.replaceFirst(Regex("^\n{0,2}"), "")
+        } else {
+            content
+        }
         if (msgs.isEmpty() || msgs.last().role != "assistant") {
             msgs.add(Message("assistant", content.replaceFirst(Regex("^\n{0,2}"), "")))
         } else {
@@ -180,8 +184,7 @@ class ChatViewModel : ViewModel() {
                     val match = Regex("<think>").find(content)!!
                     updateAIReasoningMessage(
                         content.substring(
-                            match.range.last + 1,
-                            content.length
+                            match.range.last + 1, content.length
                         )
                     )
                     return
@@ -193,20 +196,23 @@ class ChatViewModel : ViewModel() {
     }
 
     fun updateAIReasoningMessage(content: String) {
-        val newContent = if (msgs.last().content.length<=2 || msgs.last().role!="assistant_reasoning"){content.replaceFirst(Regex("^\n{0,2}"), "")}else{content}
+        val newContent =
+            if (msgs.last().content.length <= 2 || msgs.last().role != "assistant_reasoning") {
+                content.replaceFirst(Regex("^\n{0,2}"), "")
+            } else {
+                content
+            }
         if (isInReasoningContext && '>' in content) {
             if ("</think>" in msgs.last().content + content) {
                 val match = Regex("</think>").find(msgs.last().content + content)
                 if (match != null) {
                     msgs[msgs.lastIndex] = Message(
-                        "assistant_reasoning",
-                        msgs.last().content.substring(0, match.range.first)
+                        "assistant_reasoning", msgs.last().content.substring(0, match.range.first)
                     )
                     isInReasoningContext = false
                     updateAIMessage(
-                        (msgs.last().content+content).substring(
-                            match.range.last+1,
-                            msgs.last().content.length+content.length
+                        (msgs.last().content + content).substring(
+                            match.range.last + 1, msgs.last().content.length + content.length
                         )
                     )
                     return
@@ -225,26 +231,27 @@ class ChatViewModel : ViewModel() {
     }
 
     fun msgsToSend(): List<Message> {
-        val tmpMsgs =msgs
-            .filter { it.role != "assistant_reasoning" && it.role != "system" }
+        val tmpMsgs = msgs.filter { it.role != "assistant_reasoning" && it.role != "system" }
             .map { it.copy() }.toMutableList()
-        val tmpMsgs2= if (maxContextIsNumber()){
-            tmpMsgs.subList(if (maxContextIsNumber()){max(tmpMsgs.size-maxContext.toInt(),0)}else{0},tmpMsgs.size)
+        val tmpMsgs2 = if (maxContextIsNumber()) {
+            tmpMsgs.subList(
+                if (maxContextIsNumber()) {
+                    max(tmpMsgs.size - maxContext.toInt(), 0)
+                } else {
+                    0
+                }, tmpMsgs.size
+            )
         } else {
             tmpMsgs
         }
-        if (msgs.first().role=="system"){
-            tmpMsgs2.add(0,msgs.first())
+        if (msgs.first().role == "system") {
+            tmpMsgs2.add(0, msgs.first())
         }
-        return tmpMsgs2
-            .filter { it.role != "assistant_reasoning" }
-            .map { it.copy() }
+        return tmpMsgs2.filter { it.role != "assistant_reasoning" }.map { it.copy() }
     }
 
     fun toListWithoutSystemPrompt(): List<Message> {
-        return msgs
-            .filter { it.role != "system" }
-            .map { it.copy() }
+        return msgs.filter { it.role != "system" }.map { it.copy() }
     }
 
     fun fromList(lst: MutableList<Message>) {
@@ -283,21 +290,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 var api_url = ""
 var api_key = ""
-var model=""
-var systemPrompt=""
-var containerHeight=0
-var contentHeight=0
-var hasLaunched=false
-var isInReasoningContext=false
+var model = ""
+var systemPrompt = ""
+var containerHeight = 0
+var contentHeight = 0
+var hasLaunched = false
+var isInReasoningContext = false
 var cancel = false
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainUI(viewModel: ChatViewModel) {
     val context = LocalContext.current
     val history = context.getSharedPreferences("history", Context.MODE_PRIVATE)
-    val lazyListState = rememberLazyListState(2147483647,2147483647)
+    val lazyListState = rememberLazyListState(2147483647, 2147483647)
     var sendImg by remember { mutableIntStateOf(1) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val sessionsPref = context.getSharedPreferences("sessions", Context.MODE_PRIVATE)
@@ -309,10 +318,18 @@ fun MainUI(viewModel: ChatViewModel) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    fun save(){
-        if (viewModel.msgs.size > if (systemPrompt.isNotEmpty()){1}else{0}) {
+    fun save() {
+        if (viewModel.msgs.size > if (systemPrompt.isNotEmpty()) {
+                1
+            } else {
+                0
+            }
+        ) {
             history.edit {
-                putString(viewModel.currentSession, Gson().toJson(viewModel.toListWithoutSystemPrompt()).toString())
+                putString(
+                    viewModel.currentSession,
+                    Gson().toJson(viewModel.toListWithoutSystemPrompt()).toString()
+                )
             }
             sessionsPref.edit {
                 putString("sessions", Gson().toJson(viewModel.sessions))
@@ -329,36 +346,39 @@ fun MainUI(viewModel: ChatViewModel) {
             val viewportHeight = layoutInfo.viewportEndOffset
             val lastItem = visibleItems.last()
             val lastItemBottom = lastItem.offset + lastItem.size
-            lastItemBottom-viewportHeight
+            lastItemBottom - viewportHeight
         }
     }
 
     LaunchedEffect(Unit) {
-        viewModel.temperature=settingsPref.getInt("temperature",-1)
-        viewModel.maxTokens=settingsPref.getString("maxTokens","")!!
-        viewModel.maxContext=settingsPref.getString("maxContext","")!!
-        viewModel.parseMd=settingsPref.getBoolean("parseMd",true)
-        viewModel.sessions.addAll(Gson().fromJson(sessionsPref.getString("sessions", "[]")!!,
-            object : TypeToken<List<String>>() {}.type))
+        viewModel.temperature = settingsPref.getInt("temperature", -1)
+        viewModel.maxTokens = settingsPref.getString("maxTokens", "")!!
+        viewModel.maxContext = settingsPref.getString("maxContext", "")!!
+        viewModel.parseMd = settingsPref.getBoolean("parseMd", true)
+        viewModel.sessions.addAll(
+            Gson().fromJson(
+                sessionsPref.getString("sessions", "[]")!!,
+                object : TypeToken<List<String>>() {}.type
+            )
+        )
         val assistantsPref = context.getSharedPreferences("assistants", Context.MODE_PRIVATE)
         currentConfig = currentConfigPref.getString("currentConfig", "")!!
         val assistants = JsonParser.parseString(
             assistantsPref.getString(
-                currentConfig,
-                "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
+                currentConfig, "{'apiUrl':'','apiKey':'','model':'','systemPrompt':''}"
             )
         ).asJsonObject
-        api_url = assistants.get("apiUrl").asString;api_key = assistants.get("apiKey").asString;model =
-        assistants.get("model").asString;systemPrompt = assistants.get("systemPrompt").asString
+        api_url = assistants.get("apiUrl").asString; api_key =
+        assistants.get("apiKey").asString; model = assistants.get("model").asString; systemPrompt =
+        assistants.get("systemPrompt").asString
         if (viewModel.sessions.isEmpty()) {
-            viewModel.sessions.add("新对话" + System.currentTimeMillis().toString()+"\u200B")
+            viewModel.sessions.add("新对话" + System.currentTimeMillis().toString() + "\u200B")
         }
         viewModel.currentSession = viewModel.sessions.last()
         if (history.getString(viewModel.currentSession, "")!!.isNotEmpty()) {
             viewModel.fromList(
                 Gson().fromJson(
-                    history.getString(viewModel.currentSession, "[]")!!,
-                    Array<Message>::class.java
+                    history.getString(viewModel.currentSession, "[]")!!, Array<Message>::class.java
                 ).toMutableList()
             )
         }
@@ -371,15 +391,18 @@ fun MainUI(viewModel: ChatViewModel) {
     }
 
     // 自动滚动
-    LaunchedEffect(if (viewModel.msgs.isNotEmpty()) viewModel.msgs.last().content.length else 0,viewModel.isLoading) {
+    LaunchedEffect(
+        if (viewModel.msgs.isNotEmpty()) viewModel.msgs.last().content.length else 0,
+        viewModel.isLoading
+    ) {
         if (!lazyListState.isScrollInProgress) {
             if (lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == viewModel.msgs.lastIndex) {
                 if (distanceToBottomCurrentElement < 500) {
-                    lazyListState.scrollToItem(viewModel.msgs.lastIndex,2147483647)
+                    lazyListState.scrollToItem(viewModel.msgs.lastIndex, 2147483647)
                 }
-            } else if (lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == viewModel.msgs.lastIndex-1) {
+            } else if (lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == viewModel.msgs.lastIndex - 1) {
                 if (distanceToBottomCurrentElement < 400 && viewModel.msgs.last().content.length < 500) {
-                    lazyListState.scrollToItem(viewModel.msgs.lastIndex,2147483647)
+                    lazyListState.scrollToItem(viewModel.msgs.lastIndex, 2147483647)
                 }
             }
         }
@@ -401,8 +424,7 @@ fun MainUI(viewModel: ChatViewModel) {
                     if (match != null) {
                         val part1 = match.groups[1]!!.value
                         val part2 = viewModel.msgs.last().content.substring(
-                            match.range.last + 1,
-                            viewModel.msgs.last().content.length
+                            match.range.last + 1, viewModel.msgs.last().content.length
                         )
                         viewModel.msgs.removeAt(viewModel.msgs.lastIndex)
                         viewModel.msgs.add(Message("assistant_reasoning", part1))
@@ -423,7 +445,8 @@ fun MainUI(viewModel: ChatViewModel) {
                     if (lastMsg.role == "assistant" && lastMsg.content.isNotEmpty() || lastMsg.role != "assistant") {
                         save()
                     }
-                }catch (_: Exception){}
+                } catch (_: Exception) {
+                }
             }
         }
     }
@@ -431,298 +454,205 @@ fun MainUI(viewModel: ChatViewModel) {
         AlertDialog(
             onDismissRequest = { viewModel.errorDialogExpanded = false },
             title = { Text("错误: ${viewModel.errorCode}") },
-            text = { SelectionContainer { Column(Modifier.verticalScroll(rememberScrollState())) { Text(viewModel.errorMsg) } }},
+            text = {
+                SelectionContainer {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text(
+                            viewModel.errorMsg
+                        )
+                    }
+                }
+            },
             confirmButton = {})
     }
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier.width(250.dp)
-            ) {
-                HistoryDrawer(
-                    viewModel,
-                    context,
-                    sessionsPref,
-                    history,
-                    drawerState,
-                    vibrator,
-                    lazyListState
-                )
-            }
-        },
-        content = {
-            Scaffold(
-                topBar = {
-                    TopBar(
-                        viewModel, context, drawerState, if (currentConfig!!.isNotEmpty()) {
-                            currentConfig
-                        } else {
-                            "请先配置 AI API"
-                        }, vibrator,settingsPref
-                    )
-                },
-                bottomBar = {
-                    MessageInputBar(
-                        msg = viewModel.inputMsg,
-                        onMsgChange = { viewModel.inputMsg = it },
-                        onSend = {
-                            viewModel.sessions.remove(viewModel.currentSession)
-                            viewModel.sessions.add(viewModel.currentSession)
-                            if (viewModel.isLoading) {
-                                cancel = true
-                            } else {
-                                try {
-                                    if (it.isNotEmpty()) {
-                                        if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
-                                            if (((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system")) && viewModel.currentSession.startsWith("新对话") && viewModel.currentSession.endsWith("\u200B")) {
-                                                val withoutEnter = it.replace("\n", "")
-                                                var newName = if (withoutEnter.length > 20) {
-                                                    withoutEnter.substring(0, 20)
-                                                } else {
-                                                    withoutEnter
-                                                }
-                                                if (newName in viewModel.sessions) {
-                                                    newName = newName + System.currentTimeMillis()
-                                                        .toString()
-                                                }
-                                                viewModel.sessions.add(newName)
-                                                viewModel.sessions.remove(viewModel.currentSession)
-                                                save()
-                                                viewModel.currentSession = newName
-                                            }
-                                            keyboardController?.hide()
-                                            focusManager.clearFocus()
-                                            viewModel.addUserMessage(it)
-                                            viewModel.isEditing = false
-                                            send(context, viewModel)
-                                            viewModel.inputMsg = ""
-                                            scope.launch {
-                                                lazyListState.scrollToItem(
-                                                    viewModel.msgs.lastIndex,
-                                                    2147483647
-                                                )
-                                            }
+    ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
+        ModalDrawerSheet(
+            modifier = Modifier.width(250.dp)
+        ) {
+            HistoryDrawer(
+                viewModel, context, sessionsPref, history, drawerState, vibrator, lazyListState
+            )
+        }
+    }, content = {
+        Scaffold(topBar = {
+            TopBar(
+                viewModel, context, drawerState, if (currentConfig!!.isNotEmpty()) {
+                    currentConfig
+                } else {
+                    "请先配置 AI API"
+                }, vibrator, settingsPref
+            )
+        }, bottomBar = {
+            MessageInputBar(
+                msg = viewModel.inputMsg,
+                onMsgChange = { viewModel.inputMsg = it },
+                onSend = {
+                    viewModel.sessions.remove(viewModel.currentSession)
+                    viewModel.sessions.add(viewModel.currentSession)
+                    if (viewModel.isLoading) {
+                        cancel = true
+                    } else {
+                        try {
+                            if (it.isNotEmpty()) {
+                                if (currentConfig!!.isNotEmpty() && !api_url.startsWith("/")) {
+                                    if (((viewModel.msgs.isEmpty() || viewModel.msgs.last().role == "system")) && viewModel.currentSession.startsWith(
+                                            "新对话"
+                                        ) && viewModel.currentSession.endsWith("\u200B")
+                                    ) {
+                                        val withoutEnter = it.replace("\n", "")
+                                        var newName = if (withoutEnter.length > 20) {
+                                            withoutEnter.substring(0, 20)
                                         } else {
-                                            Toast.makeText(
-                                                context, "请先配置 AI API",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            withoutEnter
+                                        }
+                                        if (newName in viewModel.sessions) {
+                                            newName += System.currentTimeMillis().toString()
+                                        }
+                                        viewModel.sessions.add(newName)
+                                        viewModel.sessions.remove(viewModel.currentSession)
+                                        save()
+                                        viewModel.currentSession = newName
+                                    }
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    viewModel.addUserMessage(it)
+                                    viewModel.isEditing = false
+                                    send(context, viewModel)
+                                    viewModel.inputMsg = ""
+                                    scope.launch {
+                                        lazyListState.scrollToItem(
+                                            viewModel.msgs.lastIndex, 2147483647
+                                        )
+                                    }
+                                } else {
+                                    Toast.makeText(
+                                        context, "请先配置 AI API", Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else {
+                                Toast.makeText(
+                                    context, "请输入你的问题", Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                sendImg = if (sendImg == 1) {
+                    Icons.Default.ArrowUpward
+                } else {
+                    ImageVector.vectorResource(R.drawable.ic_rectangle)
+                },
+                viewModel,
+                vibrator,
+                lazyListState,
+                scope,
+                distanceToBottomCurrentElement,
+                history
+            )
+        }) { innerPadding ->
+            SelectionContainer(Modifier.onSizeChanged { size ->
+                containerHeight = size.height
+            }) {
+                var dialogExpanded by remember { mutableStateOf(false) }
+                var deletingMsg by remember { mutableIntStateOf(-1) }
+                if (dialogExpanded) {
+                    AlertDialog(
+                        onDismissRequest = { dialogExpanded = false },
+                        title = { Text("永久删除消息") },
+                        text = {
+                            Text("删除后，该消息将不可恢复。确认删除吗？")
+                        },
+                        confirmButton = {
+                            TextButton({
+                                dialogExpanded = false
+                                viewModel.msgs.removeAt(deletingMsg)
+                                try {
+                                    if (viewModel.msgs[deletingMsg - 1].role == "assistant_reasoning") {
+                                        viewModel.msgs.removeAt(deletingMsg - 1)
+                                    }
+                                } catch (_: Exception) {
+                                }
+                                save()
+                            }) {
+                                Text("删除")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton({
+                                dialogExpanded = false
+                            }) {
+                                Text("取消")
+                            }
+                        })
+                }
+                LazyColumn( // 消息列表
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .onSizeChanged { size ->
+                            contentHeight = size.height
+                        }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                        }, state = lazyListState
+                ) {
+                    itemsIndexed(viewModel.msgs) { i, msg ->
+                        when (msg.role) {
+                            "assistant" -> {
+                                Row {
+                                    Icon(
+                                        Icons.Default.Api,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    if (msg.content.isNotEmpty() || !viewModel.isLoading) {
+                                        if (viewModel.parseMd) {
+                                            InlineMarkdown(
+                                                content = msg.content,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(end = 16.dp),
+                                                context
+                                            )
+                                        } else {
+                                            Text(msg.content, Modifier.padding(end = 16.dp))
                                         }
                                     } else {
-                                        Toast.makeText(
-                                            context,
-                                            "请输入你的问题",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        sendImg = if (sendImg == 1) {
-                            Icons.Default.ArrowUpward
-                        } else {
-                            ImageVector.vectorResource(R.drawable.ic_rectangle)
-                        },
-                        viewModel, vibrator, lazyListState, scope,distanceToBottomCurrentElement,history
-                    )
-                }
-            ) { innerPadding ->
-                SelectionContainer(Modifier.onSizeChanged { size ->
-                    containerHeight = size.height
-                }) {
-                    var dialogExpanded by remember { mutableStateOf(false) }
-                    var deletingMsg by remember { mutableIntStateOf(-1) }
-                    if (dialogExpanded) {
-                        AlertDialog(
-                            onDismissRequest = { dialogExpanded = false },
-                            title = { Text("永久删除消息") },
-                            text = {
-                                Text("删除后，该消息将不可恢复。确认删除吗？")
-                            },
-                            confirmButton = {
-                                TextButton({
-                                    dialogExpanded = false
-                                    viewModel.msgs.removeAt(deletingMsg)
-                                    try {
-                                        if (viewModel.msgs[deletingMsg - 1].role == "assistant_reasoning") {
-                                            viewModel.msgs.removeAt(deletingMsg - 1)
-                                        }
-                                    } catch (_: Exception) {
-                                    }
-                                    save()
-                                }) {
-                                    Text("删除")
-                                }
-                            },
-                            dismissButton = {
-                                TextButton({
-                                    dialogExpanded = false
-                                }) {
-                                    Text("取消")
-                                }
-                            })
-                    }
-                    LazyColumn( // 消息列表
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .onSizeChanged { size ->
-                                contentHeight = size.height
-                            }
-                            .clickable(interactionSource = remember { MutableInteractionSource() },
-                                indication = null) {
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                            },
-                        state = lazyListState
-                    ) {
-                        itemsIndexed(viewModel.msgs) { i, msg ->
-                            when (msg.role) {
-                                "assistant" -> {
-                                    Row {
-                                        Icon(
-                                            Icons.Default.Api,
-                                            null,
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        if (msg.content.isNotEmpty() || !viewModel.isLoading) {
-                                            if (viewModel.parseMd) {
-                                                InlineMarkdown(
-                                                    content = msg.content,
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .padding(end = 16.dp),
-                                                    context
-                                                )
-                                            } else {
-                                                Text(msg.content, Modifier.padding(end = 16.dp))
-                                            }
-                                        } else {
-                                            CircularProgressIndicator(Modifier.size(24.dp))
-                                        }
-                                    }
-                                    Row(Modifier.padding(start = 24.dp, bottom = 10.dp)) {
-                                        if (!viewModel.isLoading || i!=viewModel.msgs.lastIndex) {
-                                            IconButton({
-                                                clickVibrate(vibrator)
-                                                viewModel.msgs.removeRange(
-                                                    if (viewModel.msgs[i - 1].role == "assistant_reasoning") {
-                                                        i - 1
-                                                    } else {
-                                                        i
-                                                    }, viewModel.msgs.size
-                                                )
-                                                send(context, viewModel)
-                                            }, Modifier.size(24.dp)) {
-                                                Icon(
-                                                    Icons.Default.Refresh,
-                                                    null,
-                                                    tint = MaterialTheme.colorScheme.secondary
-                                                )
-                                            }
-                                            Spacer(Modifier.width(10.dp))
-                                            IconButton({
-                                                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setText(
-                                                    msg.content
-                                                )
-                                            }, Modifier.size(24.dp)) {
-                                                Icon(
-                                                    Icons.Default.CopyAll,
-                                                    null,
-                                                    tint = MaterialTheme.colorScheme.secondary
-                                                )
-                                            }
-                                            Spacer(Modifier.width(10.dp))
-                                            IconButton({
-                                                deletingMsg = i
-                                                dialogExpanded = true
-                                            }, Modifier.size(24.dp)) {
-                                                Icon(
-                                                    Icons.Default.DeleteForever,
-                                                    null,
-                                                    tint = MaterialTheme.colorScheme.secondary
-                                                )
-                                            }
-                                        }
+                                        CircularProgressIndicator(Modifier.size(24.dp))
                                     }
                                 }
-
-
-                                "assistant_reasoning" -> {
-                                    val expanded = i !in viewModel.assistantThinkingClosed
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            ImageVector.vectorResource(R.drawable.ic_deep_think),
-                                            null,
-                                            tint = MaterialTheme.colorScheme.outline
-                                        )
-                                        if (expanded) {
-                                            IconButton(
-                                                { viewModel.assistantThinkingClosed.add(i) },
-                                                Modifier.size(30.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.ExpandMore,
-                                                    null,
-                                                    Modifier.rotate(180f),
-                                                    tint = MaterialTheme.colorScheme.outline
-                                                )
-                                            }
-                                        } else {
-                                            IconButton(
-                                                { viewModel.assistantThinkingClosed.remove(i) },
-                                                Modifier.size(30.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.ExpandMore,
-                                                    null,
-                                                    tint = MaterialTheme.colorScheme.outline
-                                                )
-                                            }
-                                        }
-                                    }
-                                    if (expanded) {
-                                        Row(Modifier.padding(end = 16.dp)) {
-                                            Spacer(Modifier.size(22.dp))
-                                            Text(msg.content, color = Color.Gray)
-                                        }
-                                    }
-                                }
-
-                                "user" -> {
-                                    Row(Modifier.fillMaxSize().padding(start = 16.dp, end = 10.dp), horizontalArrangement = Arrangement.End) {
-                                        Box(Modifier.background(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = 16.dp,
-                                            bottomEnd = 0.dp
-                                        )).padding(horizontal = 12.dp, vertical = 12.dp)) {
-                                            Text(msg.content)
-                                        }
-                                    }
-                                    Row(
-                                        Modifier.fillMaxWidth().padding(end = 12.dp),
-                                        horizontalArrangement = Arrangement.End
-                                    ) {
-                                        IconButton(
-                                            {
-                                                clickVibrate(vibrator)
-                                                if (!viewModel.isLoading) {
-                                                    viewModel.inputMsg =
-                                                        viewModel.msgs[i].content
-                                                    viewModel.msgs.removeRange(
-                                                        i,
-                                                        viewModel.msgs.size
-                                                    )
-                                                }
-                                                viewModel.isEditing = true
-                                            },
-                                            Modifier.size(24.dp)
-                                        ) {
+                                Row(Modifier.padding(start = 24.dp, bottom = 10.dp)) {
+                                    if (!viewModel.isLoading || i != viewModel.msgs.lastIndex) {
+                                        IconButton({
+                                            clickVibrate(vibrator)
+                                            viewModel.msgs.removeRange(
+                                                if (viewModel.msgs[i - 1].role == "assistant_reasoning") {
+                                                    i - 1
+                                                } else {
+                                                    i
+                                                }, viewModel.msgs.size
+                                            )
+                                            send(context, viewModel)
+                                        }, Modifier.size(24.dp)) {
                                             Icon(
-                                                Icons.Default.Edit,
+                                                Icons.Default.Refresh,
+                                                null,
+                                                tint = MaterialTheme.colorScheme.secondary
+                                            )
+                                        }
+                                        Spacer(Modifier.width(10.dp))
+                                        IconButton({
+                                            (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setText(
+                                                msg.content
+                                            )
+                                        }, Modifier.size(24.dp)) {
+                                            Icon(
+                                                Icons.Default.CopyAll,
                                                 null,
                                                 tint = MaterialTheme.colorScheme.secondary
                                             )
@@ -740,22 +670,124 @@ fun MainUI(viewModel: ChatViewModel) {
                                         }
                                     }
                                 }
+                            }
 
-                                else -> Row {
+
+                            "assistant_reasoning" -> {
+                                val expanded = i !in viewModel.assistantThinkingClosed
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        Icons.Default.Settings,
-                                        null
-                                    );Text(
-                                    msg.content + "\n",
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                        ImageVector.vectorResource(R.drawable.ic_deep_think),
+                                        null,
+                                        tint = MaterialTheme.colorScheme.outline
+                                    )
+                                    if (expanded) {
+                                        IconButton(
+                                            { viewModel.assistantThinkingClosed.add(i) },
+                                            Modifier.size(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.ExpandMore,
+                                                null,
+                                                Modifier.rotate(180f),
+                                                tint = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    } else {
+                                        IconButton(
+                                            { viewModel.assistantThinkingClosed.remove(i) },
+                                            Modifier.size(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.ExpandMore,
+                                                null,
+                                                tint = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    }
                                 }
+                                if (expanded) {
+                                    Row(Modifier.padding(end = 16.dp)) {
+                                        Spacer(Modifier.size(22.dp))
+                                        Text(msg.content, color = Color.Gray)
+                                    }
+                                }
+                            }
+
+                            "user" -> {
+                                Row(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(start = 16.dp, end = 10.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .background(
+                                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                shape = RoundedCornerShape(
+                                                    topStart = 16.dp,
+                                                    topEnd = 16.dp,
+                                                    bottomStart = 16.dp,
+                                                    bottomEnd = 0.dp
+                                                )
+                                            )
+                                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                                    ) {
+                                        Text(msg.content)
+                                    }
+                                }
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 12.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    IconButton(
+                                        {
+                                            clickVibrate(vibrator)
+                                            if (!viewModel.isLoading) {
+                                                viewModel.inputMsg = viewModel.msgs[i].content
+                                                viewModel.msgs.removeRange(
+                                                    i, viewModel.msgs.size
+                                                )
+                                            }
+                                            viewModel.isEditing = true
+                                        }, Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    IconButton({
+                                        deletingMsg = i
+                                        dialogExpanded = true
+                                    }, Modifier.size(24.dp)) {
+                                        Icon(
+                                            Icons.Default.DeleteForever,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            else -> Row {
+                                Icon(
+                                    Icons.Default.Settings, null
+                                ); Text(
+                                msg.content + "\n", color = MaterialTheme.colorScheme.primary
+                            )
                             }
                         }
                     }
                 }
             }
-        })
+        }
+    })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -769,7 +801,7 @@ fun MessageInputBar(
     vibrator: Vibrator,
     lazyListState: LazyListState,
     scope: CoroutineScope,
-    distanceToBottomCurrentElement:Int,
+    distanceToBottomCurrentElement: Int,
     history: SharedPreferences
 ) {
     val imeHeight = WindowInsets.ime.getBottom(LocalDensity.current)
@@ -786,13 +818,16 @@ fun MessageInputBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .imePadding(), shadowElevation = 8.dp
+            .imePadding(),
+        shadowElevation = 8.dp
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             if (viewModel.isEditing) {
                 Box(
-                    Modifier
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(10.dp))
+                    Modifier.background(
+                            MaterialTheme.colorScheme.surfaceContainerHighest,
+                            shape = RoundedCornerShape(10.dp)
+                        )
                 ) {
                     Row {
                         Icon(Icons.Default.Edit, null)
@@ -808,8 +843,7 @@ fun MessageInputBar(
                                 viewModel.addSystemMessage(systemPrompt)
                                 viewModel.inputMsg = ""
                                 viewModel.isEditing = false
-                            },
-                            Modifier.size(24.dp)
+                            }, Modifier.size(24.dp)
                         ) {
                             Icon(Icons.Default.Add, null, Modifier.rotate(45f))
                         }
@@ -826,13 +860,11 @@ fun MessageInputBar(
                     modifier = Modifier.weight(1f),
                     placeholder = {
                         Text(
-                            text = "输入消息...",
-                            style = LocalTextStyle.current.copy(
+                            text = "输入消息...", style = LocalTextStyle.current.copy(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
-                    }
-                )
+                    })
                 Spacer(Modifier.size(6.dp))
                 Box(
                     modifier = Modifier
@@ -842,8 +874,7 @@ fun MessageInputBar(
                         .clickable {
                             clickVibrate(vibrator)
                             onSend(msg)
-                        },
-                    contentAlignment = Alignment.Center
+                        }, contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = sendImg,
@@ -858,8 +889,15 @@ fun MessageInputBar(
 }
 
 @Composable
-private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPref: SharedPreferences, history: SharedPreferences,
-                          drawerState: DrawerState, vibrator: Vibrator,lazyListState: LazyListState) {
+private fun HistoryDrawer(
+    viewModel: ChatViewModel,
+    context: Context,
+    sessionsPref: SharedPreferences,
+    history: SharedPreferences,
+    drawerState: DrawerState,
+    vibrator: Vibrator,
+    lazyListState: LazyListState
+) {
     var showHistoryMenu by remember { mutableStateOf(false) }
     var openRenameDialog by remember { mutableStateOf(false) }
     var openDelDialog by remember { mutableStateOf(false) }
@@ -906,15 +944,12 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                                 viewModel.currentSession = newName1
                             }
                         }
-                    }
-                ) { Text("完成") }
+                    }) { Text("完成") }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { openRenameDialog = false }
-                ) { Text("取消") }
-            }
-        )
+                    onClick = { openRenameDialog = false }) { Text("取消") }
+            })
     }
     if (openDelDialog) {
         AlertDialog(
@@ -935,17 +970,14 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         if (editingSession == viewModel.currentSession) {
                             createNewSession(viewModel, context, isInNewSessionCheck = false)
                         }
-                    }
-                ) { Text("删除") }
+                    }) { Text("删除") }
             },
             dismissButton = {
                 TextButton(
                     onClick = {
                         openDelDialog = false
-                    }
-                ) { Text("取消") }
-            }
-        )
+                    }) { Text("取消") }
+            })
     }
     Row(Modifier.padding(16.dp)) {
         Text("对话记录", fontSize = 24.sp)
@@ -963,8 +995,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                         scope.launch { drawerState.close() }
                         createNewSession(viewModel, context)
                     }
-                },
-            contentAlignment = Alignment.Center
+                }, contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.AddCircle,
@@ -977,8 +1008,8 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
     LazyColumn {
         itemsIndexed(viewModel.sessions.reversed()) { i, session ->
             Box(
-                modifier = Modifier.combinedClickable(
-                    onClick = {
+                modifier = Modifier
+                    .combinedClickable(onClick = {
                         scope.launch { drawerState.close() }
                         if (viewModel.isLoading) {
                             Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
@@ -999,8 +1030,7 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                             } catch (_: Exception) {
                             }
                         }
-                    },
-                    onLongClick = {
+                    }, onLongClick = {
                         clickVibrate(vibrator)
                         expandedIndex = i
                         editingSession = session
@@ -1009,10 +1039,10 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
                             selection = TextRange(0, session.length)
                         )
                         showHistoryMenu = true
-                    }
-                ).onGloballyPositioned { coordinates ->
-                    buttonPositions[i] = coordinates.localToWindow(Offset.Zero)
-                }) {
+                    })
+                    .onGloballyPositioned { coordinates ->
+                        buttonPositions[i] = coordinates.localToWindow(Offset.Zero)
+                    }) {
                 Text(
                     if (session.startsWith("新对话") && session.endsWith("\u200B")) "新对话" else session,
                     Modifier
@@ -1036,46 +1066,41 @@ private fun HistoryDrawer(viewModel: ChatViewModel, context: Context, sessionsPr
         IntOffset(x = 300, buttonPositions[expandedIndex]?.y?.toInt() ?: 0),
         100.dp
     ) {
-        DropdownMenuItem(
-            text = { Text("重命名") },
-            onClick = {
-                showHistoryMenu = false
-                openRenameDialog = true
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("删除") },
-            onClick = {
-                showHistoryMenu = false
-                openDelDialog = true
-            }
-        )
+        DropdownMenuItem(text = { Text("重命名") }, onClick = {
+            showHistoryMenu = false
+            openRenameDialog = true
+        })
+        DropdownMenuItem(text = { Text("删除") }, onClick = {
+            showHistoryMenu = false
+            openDelDialog = true
+        })
     }
     FreeDropdownMenu(
         expanded = showHistoryMenu,
         onDismissRequest = { showHistoryMenu = false },
         offset = IntOffset(x = 300, buttonPositions[expandedIndex]?.y?.toInt() ?: 0)
     ) {
-        DropdownMenuItem(
-            text = { Text("重命名") },
-            onClick = {
-                showHistoryMenu = false
-                openRenameDialog = true
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("删除") },
-            onClick = {
-                showHistoryMenu = false
-                openDelDialog = true
-            }
-        )
+        DropdownMenuItem(text = { Text("重命名") }, onClick = {
+            showHistoryMenu = false
+            openRenameDialog = true
+        })
+        DropdownMenuItem(text = { Text("删除") }, onClick = {
+            showHistoryMenu = false
+            openDelDialog = true
+        })
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: DrawerState,currentConfig: String,vibrator: Vibrator,settingsPref: SharedPreferences) {
+private fun TopBar(
+    viewModel: ChatViewModel,
+    context: Context,
+    drawerState: DrawerState,
+    currentConfig: String,
+    vibrator: Vibrator,
+    settingsPref: SharedPreferences
+) {
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     var temperatureExpanded by remember { mutableStateOf(false) }
@@ -1084,182 +1109,166 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
     var temperatureChanged by remember { mutableStateOf(false) }
     var maxTokensChanged by remember { mutableStateOf(false) }
     var maxContextChanged by remember { mutableStateOf(false) }
-    var temperaturePosition: Offset by remember { mutableStateOf(Offset(0F, 0F))}
-    var maxTokensPosition: Offset by remember { mutableStateOf(Offset(0F, 0F))}
-    var maxContextPosition: Offset by remember { mutableStateOf(Offset(0F, 0F))}
+    var temperaturePosition: Offset by remember { mutableStateOf(Offset(0F, 0F)) }
+    var maxTokensPosition: Offset by remember { mutableStateOf(Offset(0F, 0F)) }
+    var maxContextPosition: Offset by remember { mutableStateOf(Offset(0F, 0F)) }
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx().toInt() }
-    TopAppBar(
-        navigationIcon = {
-            IconButton({ scope.launch { clickVibrate(vibrator);drawerState.open() } }) {
-                Icon(
-                    ImageVector.vectorResource(R.drawable.ic_msgs_list),
-                    null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
+    TopAppBar(navigationIcon = {
+        IconButton({ scope.launch { clickVibrate(vibrator); drawerState.open() } }) {
+            Icon(
+                ImageVector.vectorResource(R.drawable.ic_msgs_list),
+                null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }, title = {
+        Column {
+            Text(
+                (if (viewModel.currentSession.startsWith("新对话") && viewModel.currentSession.endsWith(
+                        "\u200B"
+                    )
+                ) "新对话" else viewModel.currentSession).ifEmpty {
+                    stringResource(R.string.app_name)
+                }, maxLines = 1
+            )
+            Text(
+                text = currentConfig, color = Color.Gray, fontSize = 12.sp, lineHeight = 12.sp
+            )
+        }
+    }, actions = {
+        IconButton(onClick = { showMenu = !showMenu; clickVibrate(vibrator) }) {
+            Icon(imageVector = Icons.Default.MoreVert, null)
+        }
+        DropdownMenu(showMenu, onDismissRequest = {
+            showMenu = false
+            temperatureExpanded = false
+            maxTokensExpanded = false
+            maxContextExpanded = false
+            if (temperatureChanged) {
+                settingsPref.edit {
+                    putInt("temperature", viewModel.temperature)
+                }
+                temperatureChanged = false
             }
-        },
-        title = {
-            Column {
-                Text(
-                    (if (viewModel.currentSession.startsWith("新对话") && viewModel.currentSession.endsWith(
-                            "\u200B"
-                        )
-                    ) "新对话" else viewModel.currentSession).ifEmpty {
-                        stringResource(R.string.app_name)
-                    }, maxLines = 1
-                )
-                Text(
-                    text = currentConfig,
-                    color = Color.Gray,
-                    fontSize = 12.sp, lineHeight = 12.sp
-                )
+            if (maxTokensChanged) {
+                settingsPref.edit {
+                    putString("maxTokens", viewModel.maxTokens)
+                }
+                maxTokensChanged = false
             }
-        },
-        actions = {
-            IconButton(onClick = { showMenu = !showMenu;clickVibrate(vibrator) }) {
-                Icon(imageVector = Icons.Default.MoreVert, null)
+            if (maxContextChanged) {
+                settingsPref.edit {
+                    putString("maxContext", viewModel.maxContext)
+                }
+                maxTokensChanged = false
             }
-            DropdownMenu(showMenu, onDismissRequest = {
+        }, offset = DpOffset(x = (-10).dp, y = 0.dp)) {
+            DropdownMenuItem(text = { Text("设置") }, onClick = {
                 showMenu = false
-                temperatureExpanded = false
-                maxTokensExpanded = false
-                maxContextExpanded = false
-                if (temperatureChanged) {
-                    settingsPref.edit {
-                        putInt("temperature", viewModel.temperature)
-                    }
-                    temperatureChanged = false
+                val intent = Intent(context, SettingsActivity::class.java)
+                context.startActivity(intent)
+                (context as ComponentActivity).finish()
+            })
+            DropdownMenuItem(text = { Text("开启新对话") }, onClick = {
+                clickVibrate(vibrator)
+                showMenu = false
+                if (viewModel.isLoading) {
+                    Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT).show()
+                } else {
+                    createNewSession(viewModel, context)
                 }
-                if (maxTokensChanged) {
-                    settingsPref.edit {
-                        putString("maxTokens", viewModel.maxTokens)
-                    }
-                    maxTokensChanged = false
-                }
-                if (maxContextChanged) {
-                    settingsPref.edit {
-                        putString("maxContext", viewModel.maxContext)
-                    }
-                    maxTokensChanged = false
-                }
-            }, offset = DpOffset(x = (-10).dp, y = 0.dp)) {
-                DropdownMenuItem(
-                    text = { Text("设置") },
-                    onClick = {
-                        showMenu = false
-                        val intent = Intent(context, SettingsActivity::class.java)
-                        context.startActivity(intent)
-                        (context as ComponentActivity).finish()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("开启新对话") },
-                    onClick = {
-                        clickVibrate(vibrator)
-                        showMenu = false
-                        if (viewModel.isLoading) {
-                            Toast.makeText(context, "AI 正在回答中", Toast.LENGTH_SHORT)
-                                .show()
+            })
+            DropdownMenuItem(text = {
+                Text(
+                    "温度:${
+                        if (viewModel.temperature >= 0) {
+                            viewModel.temperature.toFloat() / 10
                         } else {
-                            createNewSession(viewModel, context)
+                            "未设置"
                         }
-                    }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            "温度:${
-                                if (viewModel.temperature >= 0) {
-                                    viewModel.temperature.toFloat() / 10
-                                } else {
-                                    "未设置"
-                                }
-                            }",
-                            modifier = Modifier.onGloballyPositioned { coordinates ->
-                                temperaturePosition = coordinates.localToWindow(Offset.Zero)
+                    }", modifier = Modifier.onGloballyPositioned { coordinates ->
+                        temperaturePosition = coordinates.localToWindow(Offset.Zero)
+                    })
+            }, onClick = { temperatureExpanded = !temperatureExpanded })
+            DropdownMenuItem(text = {
+                Column {
+                    Text(
+                        "最大 token 数:${
+                            if (viewModel.maxTokensIsNumber()) {
+                                viewModel.maxTokens
+                            } else {
+                                "未设置"
                             }
-                        )
-                    },
-                    onClick = { temperatureExpanded = !temperatureExpanded }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(
-                                "最大 token 数:${
-                                    if (viewModel.maxTokensIsNumber()) {
-                                        viewModel.maxTokens
-                                    } else {
-                                        "未设置"
-                                    }
-                                }",
-                                modifier = Modifier.onGloballyPositioned { coordinates ->
-                                    maxTokensPosition = coordinates.localToWindow(Offset.Zero)
-                                }
-                            )
-                        }
-                    },
-                    onClick = { maxTokensExpanded = !maxTokensExpanded }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(
-                                "上下文数:${
-                                    if (viewModel.maxContextIsNumber()) {
-                                        viewModel.maxContext
-                                    } else {
-                                        "未设置"
-                                    }
-                                }",
-                                modifier = Modifier.onGloballyPositioned { coordinates ->
-                                    maxContextPosition = coordinates.localToWindow(Offset.Zero)
-                                }
-                            )
-                        }
-                    },
-                    onClick = { maxContextExpanded = !maxContextExpanded }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("解析md", Modifier.weight(1f))
-                            Checkbox(viewModel.parseMd, onCheckedChange = {
-                                clickVibrate(vibrator)
-                                viewModel.parseMd = !viewModel.parseMd
-                                settingsPref.edit {
-                                    putBoolean("parseMd", viewModel.parseMd)
-                                }
-                            })
-                        }
-                    },
-                    onClick = {
+                        }", modifier = Modifier.onGloballyPositioned { coordinates ->
+                            maxTokensPosition = coordinates.localToWindow(Offset.Zero)
+                        })
+                }
+            }, onClick = { maxTokensExpanded = !maxTokensExpanded })
+            DropdownMenuItem(text = {
+                Column {
+                    Text(
+                        "上下文数:${
+                            if (viewModel.maxContextIsNumber()) {
+                                viewModel.maxContext
+                            } else {
+                                "未设置"
+                            }
+                        }", modifier = Modifier.onGloballyPositioned { coordinates ->
+                            maxContextPosition = coordinates.localToWindow(Offset.Zero)
+                        })
+                }
+            }, onClick = { maxContextExpanded = !maxContextExpanded })
+            DropdownMenuItem(text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("解析md", Modifier.weight(1f))
+                    Checkbox(viewModel.parseMd, onCheckedChange = {
                         clickVibrate(vibrator)
                         viewModel.parseMd = !viewModel.parseMd
                         settingsPref.edit {
                             putBoolean("parseMd", viewModel.parseMd)
                         }
-                    }
-                )
-            }
-        }
-    )
-    FreeDropdownMenu(temperatureExpanded,{temperatureExpanded=false},IntOffset(screenWidthPx-with(density){330.dp.toPx().toInt()},temperaturePosition.y.toInt()+with(density){85.dp.toPx().toInt()}), width = 150.dp) {
-        Slider(value = viewModel.temperature.toFloat(), onValueChange = {
-            val tmp = round(it).toInt()
-            if (tmp != viewModel.temperature) {
-                viewModel.temperature = tmp
+                    })
+                }
+            }, onClick = {
                 clickVibrate(vibrator)
-            }
-            temperatureChanged = true
-        }, valueRange = -1f..20f, steps = 20,
-            modifier = Modifier.height(40.dp))
+                viewModel.parseMd = !viewModel.parseMd
+                settingsPref.edit {
+                    putBoolean("parseMd", viewModel.parseMd)
+                }
+            })
+        }
+    })
+    FreeDropdownMenu(
+        temperatureExpanded,
+        { temperatureExpanded = false },
+        IntOffset(
+            screenWidthPx - with(density) { 330.dp.toPx().toInt() },
+            temperaturePosition.y.toInt() + with(density) { 85.dp.toPx().toInt() }),
+        width = 150.dp
+    ) {
+        Slider(
+            value = viewModel.temperature.toFloat(), onValueChange = {
+                val tmp = round(it).toInt()
+                if (tmp != viewModel.temperature) {
+                    viewModel.temperature = tmp
+                    clickVibrate(vibrator)
+                }
+                temperatureChanged = true
+            }, valueRange = -1f..20f, steps = 20, modifier = Modifier.height(40.dp)
+        )
     }
-    FreeDropdownMenu(maxTokensExpanded,{maxTokensExpanded=false},IntOffset(screenWidthPx-with(density){280.dp.toPx().toInt()},maxTokensPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+    FreeDropdownMenu(
+        maxTokensExpanded,
+        { maxTokensExpanded = false },
+        IntOffset(
+            screenWidthPx - with(density) { 280.dp.toPx().toInt() },
+            maxTokensPosition.y.toInt() + with(density) { 85.dp.toPx().toInt() })
+    ) {
         SmallTextField(
-            value = viewModel.maxTokens, onValueChange = {
+            value = viewModel.maxTokens,
+            onValueChange = {
                 try {
                     viewModel.maxTokens = it
                 } catch (_: Exception) {
@@ -1272,9 +1281,16 @@ private fun TopBar(viewModel: ChatViewModel,context: Context,drawerState: Drawer
             showHandle = false
         )
     }
-    FreeDropdownMenu(maxContextExpanded,{maxContextExpanded=false},IntOffset(screenWidthPx-with(density){280.dp.toPx().toInt()},maxContextPosition.y.toInt()+with(density){85.dp.toPx().toInt()})) {
+    FreeDropdownMenu(
+        maxContextExpanded,
+        { maxContextExpanded = false },
+        IntOffset(
+            screenWidthPx - with(density) { 280.dp.toPx().toInt() },
+            maxContextPosition.y.toInt() + with(density) { 85.dp.toPx().toInt() })
+    ) {
         SmallTextField(
-            value = viewModel.maxContext, onValueChange = {
+            value = viewModel.maxContext,
+            onValueChange = {
                 try {
                     viewModel.maxContext = it
                 } catch (_: Exception) {

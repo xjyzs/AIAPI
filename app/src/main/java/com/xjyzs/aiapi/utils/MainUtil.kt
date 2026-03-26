@@ -548,8 +548,10 @@ fun send(
                     //解析
                     while (reader.readLine().also { line = it } != null) {
                         try {
-                            val cleanLine = line?.removePrefix("data: ")?.trim()
+                            var cleanLine = line?.removePrefix("data:")?.trim()
+                            cleanLine = cleanLine?.removePrefix(" ")?.trim()
                             val json = JsonParser.parseString(cleanLine).asJsonObject
+                            println(json)
                             val choices = json.getAsJsonArray("choices")
                                 ?.firstOrNull()
                                 ?.asJsonObject

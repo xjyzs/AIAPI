@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    //alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -56,9 +56,22 @@ android {
             ndk { abiFilters.add("armeabi-v7a") }
             this.signingConfig = signingConfig
         }
-        create("arm64") {
+        create("arm64Minsdk35") {
             dimension = "abi"
             ndk { abiFilters.add("arm64-v8a") }
+            minSdk=35
+            this.signingConfig = signingConfig
+        }
+        create("arm64Minsdk29") {
+            dimension = "abi"
+            ndk { abiFilters.add("arm64-v8a") }
+            minSdk=29
+            this.signingConfig = signingConfig
+        }
+        create("arm64Minsdk26") {
+            dimension = "abi"
+            ndk { abiFilters.add("arm64-v8a") }
+            minSdk=26
             this.signingConfig = signingConfig
         }
         create("universal") {
