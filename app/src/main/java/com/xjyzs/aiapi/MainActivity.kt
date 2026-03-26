@@ -930,7 +930,7 @@ private fun HistoryDrawer(
                         if (newName1 != editingSession) {
                             viewModel.sessions.remove(editingSession)
                             if (newName1 in viewModel.sessions) {
-                                newName1 = newName1 + System.currentTimeMillis().toString()
+                                newName1 += System.currentTimeMillis().toString()
                             }
                             viewModel.sessions.add(newName1)
                             sessionsPref.edit {
